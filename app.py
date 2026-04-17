@@ -427,20 +427,19 @@ def extract_symptoms_from_text(text):
     detected = []
     remaining = cleaned
 
+    input_words = set(cleaned.split())
+
     for symptom in feature_columns:
 
-        # normalize both sides
-        normalized = clean_text_for_match(symptom)
+        symptom_words = set(clean_text_for_match(symptom).split())
 
-        # 🔥 flexible matching (handles small variations)
-        words = normalized.split()
-        pattern = r"\b" + r"\s+".join(words) + r"\b"
-
-        if re.search(pattern, remaining):
+        # 🔥 word-overlap matching instead of exact phrase
+        if symptom_words.issubset(input_words):
             if symptom not in detected:
                 detected.append(symptom)
 
-            remaining = re.sub(pattern, " ", remaining, count=1)
+            for word in symptom_words:
+                remaining = remaining.replace(word, " ")
 
     remaining = re.sub(r"\s+", " ", remaining).strip()
 
