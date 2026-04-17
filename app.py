@@ -1,6 +1,7 @@
 import os
 import re
 from html import escape
+from typing import Dict, List, Tuple
 
 import joblib
 import numpy as np
@@ -174,40 +175,26 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-BASE = os.path.dirname(__file__)
-
-# ================== REQUIRED FILES ==================
-required_files = [
-    "rf_model.pkl",
-    "label_encoder.pkl",
-    "feature_columns.pkl",
-]
-
-missing_files = [f for f in required_files if not os.path.exists(os.path.join(BASE, f))]
-if missing_files:
-    st.error("Missing required files:")
-    for f in missing_files:
-        st.write(f"- {f}")
-    st.stop()
+BASE = os.path.dirname(os.path.abspath(__file__))
 
 # ================== HELPERS ==================
-def find_existing_file(candidates):
+def find_existing_file(candidates: List[str]) -> str | None:
     for name in candidates:
         path = os.path.join(BASE, name)
         if os.path.exists(path):
             return path
     return None
 
-def clean_text_for_match(text):
+def clean_text_for_match(text: str) -> str:
     text = str(text).lower().strip()
     text = text.replace("_", " ")
     text = re.sub(r"[^a-z0-9\s]", " ", text)
     return re.sub(r"\s+", " ", text).strip()
 
-def normalize_disease_key(disease_name):
+def normalize_disease_key(disease_name: str) -> str:
     return str(disease_name).strip().lower().replace(" ", "")
 
-def confidence_message(top_conf, second_conf):
+def confidence_message(top_conf: float, second_conf: float) -> Tuple[str, str]:
     gap = top_conf - second_conf
     if top_conf >= 0.50:
         return "good", "Strong confidence prediction."
@@ -217,7 +204,30 @@ def confidence_message(top_conf, second_conf):
         return "medium", "Moderate confidence. Adding more symptoms may improve the result."
     return "low", "Low confidence. Add more relevant symptoms for a better prediction."
 
-# ================== OPTIONAL CSV FILES ==================
+def render_symptom_pills(symptoms: List[str], prefix_check: bool = False) -> str:
+    pills = []
+    for sym in symptoms:
+        label = escape(sym.replace("_", " ").title())
+        if prefix_check:
+            label = f"✓ {label}"
+        pills.append(f'<span class="symptom-pill">{label}</span>')
+    return "".join(pills)
+
+# ================== FILE DISCOVERY ==================
+model_file = os.path.join(BASE, "rf_model.pkl")
+label_encoder_file = os.path.join(BASE, "label_encoder.pkl")
+feature_columns_file = os.path.join(BASE, "feature_columns.pkl")
+display_features_file = os.path.join(BASE, "display_features.pkl")
+
+required_files = [model_file, label_encoder_file, feature_columns_file]
+missing_files = [os.path.basename(f) for f in required_files if not os.path.exists(f)]
+
+if missing_files:
+    st.error("Missing required files:")
+    for f in missing_files:
+        st.write(f"- {f}")
+    st.stop()
+
 description_file = find_existing_file([
     "symptom_description.csv",
     "symptom_Description.csv",
@@ -231,16 +241,41 @@ precaution_file = find_existing_file([
 # ================== LOAD MODELS ==================
 @st.cache_resource
 def load_models():
-    rf_model = joblib.load(os.path.join(BASE, "rf_model.pkl"))
-    label_encoder = joblib.load(os.path.join(BASE, "label_encoder.pkl"))
-    display_feature_cols = joblib.load(os.path.join(BASE, "feature_columns.pkl"))
-    return rf_model, label_encoder, display_feature_cols
+    rf_model = joblib.load(model_file)
+    label_encoder = joblib.load(label_encoder_file)
+
+    model_feature_cols = joblib.load(feature_columns_file)
+    model_feature_cols = [
+        str(x).strip() for x in model_feature_cols
+        if str(x).strip() and str(x).strip().lower() != "none"
+    ]
+
+    if os.path.exists(display_features_file):
+        display_feature_cols = joblib.load(display_features_file)
+        display_feature_cols = [
+            clean_text_for_match(x)
+            for x in display_feature_cols
+            if clean_text_for_match(x) and clean_text_for_match(x) != "none"
+        ]
+    else:
+        display_feature_cols = [x.replace("_", " ") for x in model_feature_cols]
+        display_feature_cols = [clean_text_for_match(x) for x in display_feature_cols]
+
+    if len(model_feature_cols) != len(display_feature_cols):
+        raise ValueError(
+            "Mismatch between feature_columns.pkl and display_features.pkl lengths."
+        )
+
+    if not hasattr(rf_model, "predict_proba"):
+        raise ValueError("Loaded model does not support predict_proba().")
+
+    return rf_model, label_encoder, model_feature_cols, display_feature_cols
 
 # ================== LOAD MAPS ==================
 @st.cache_data
 def load_maps():
-    desc_map = {}
-    prec_map = {}
+    desc_map: Dict[str, str] = {}
+    prec_map: Dict[str, List[str]] = {}
 
     if description_file is not None:
         desc_df = pd.read_csv(description_file)
@@ -272,19 +307,14 @@ def load_maps():
 
     return desc_map, prec_map
 
-rf, le, display_features = load_models()
-desc_map, prec_map = load_maps()
+try:
+    rf, le, model_features, display_features = load_models()
+    desc_map, prec_map = load_maps()
+except Exception as e:
+    st.error(f"Failed to load app resources: {e}")
+    st.stop()
 
 # ================== FEATURE MAPPING ==================
-display_features = [
-    clean_text_for_match(x)
-    for x in display_features
-    if clean_text_for_match(x) and clean_text_for_match(x) != "none"
-]
-
-# model was trained on underscore names in the same order
-model_features = [x.replace(" ", "_") for x in display_features]
-
 display_to_model = {
     disp: model for disp, model in zip(display_features, model_features)
 }
@@ -361,7 +391,7 @@ MANUAL_ALIASES = {
 
     "diarrhea": "diarrhoea",
     "diarrhoea": "diarrhoea",
-    
+
     "nausea": "nausea",
     "queasiness": "nausea",
     "vomiting": "vomiting",
@@ -385,11 +415,13 @@ MANUAL_ALIASES = {
     "lightheadedness": "dizziness",
 }
 
-alias_to_display = {}
+alias_to_display: Dict[str, str] = {}
+
 for disp in display_features:
-    alias_to_display[clean_text_for_match(disp)] = disp
-    alias_to_display[clean_text_for_match(disp).replace(" ", "")] = disp
-    alias_to_display[clean_text_for_match(disp).replace(" ", "_")] = disp
+    cleaned = clean_text_for_match(disp)
+    alias_to_display[cleaned] = disp
+    alias_to_display[cleaned.replace(" ", "")] = disp
+    alias_to_display[cleaned.replace(" ", "_")] = disp
 
 for alias, target in MANUAL_ALIASES.items():
     alias_clean = clean_text_for_match(alias)
@@ -400,12 +432,12 @@ for alias, target in MANUAL_ALIASES.items():
 sorted_aliases = sorted(alias_to_display.keys(), key=len, reverse=True)
 
 # ================== TEXT MATCHING ==================
-def extract_symptoms_from_text(text):
+def extract_symptoms_from_text(text: str) -> Tuple[List[str], str]:
     cleaned = clean_text_for_match(text)
     if not cleaned:
         return [], ""
 
-    detected_model = []
+    detected_model: List[str] = []
     remaining = cleaned
 
     for alias in sorted_aliases:
@@ -422,7 +454,10 @@ def extract_symptoms_from_text(text):
     return detected_model, remaining
 
 # ================== PREDICTION ==================
-def predict_topk_rf(selected_model_symptoms, k=5):
+@st.cache_data(show_spinner=False)
+def predict_topk_rf(selected_model_symptoms_tuple: Tuple[str, ...], k: int = 5):
+    selected_model_symptoms = list(selected_model_symptoms_tuple)
+
     input_vector = np.zeros((1, len(model_features)), dtype=np.float32)
     matched_count = 0
 
@@ -430,6 +465,11 @@ def predict_topk_rf(selected_model_symptoms, k=5):
         if symptom in feature_index:
             input_vector[0, feature_index[symptom]] = 1.0
             matched_count += 1
+
+    if matched_count == 0:
+        return {
+            "error": "No valid symptoms matched the model features."
+        }
 
     probabilities = rf.predict_proba(input_vector)[0]
     k = min(k, len(probabilities))
@@ -441,18 +481,30 @@ def predict_topk_rf(selected_model_symptoms, k=5):
         confidence = float(probabilities[idx])
         results.append((disease_name, confidence))
 
+    if not results:
+        return {
+            "error": "Prediction failed. Please try different symptoms."
+        }
+
     top_conf = results[0][1]
     second_conf = results[1][1] if len(results) > 1 else 0.0
 
-    if matched_count <= 1:
+    # Keep consistent with your latest pipeline logic
+    if matched_count < 2:
         return {
             "warning": "Too few valid symptoms detected. Please provide more specific symptoms.",
             "results": results
         }
 
-    if top_conf < 0.35 or (top_conf - second_conf) < 0.10:
+    if top_conf < 0.30:
         return {
             "warning": "Low confidence prediction. Try adding clearer symptoms.",
+            "results": results
+        }
+
+    if (top_conf - second_conf) < 0.08:
+        return {
+            "warning": "Symptoms overlap across diseases. Add more details.",
             "results": results
         }
 
@@ -463,6 +515,10 @@ if "selected_display" not in st.session_state:
     st.session_state["selected_display"] = []
 if "free_text" not in st.session_state:
     st.session_state["free_text"] = ""
+if "results" not in st.session_state:
+    st.session_state["results"] = None
+if "used_symptoms" not in st.session_state:
+    st.session_state["used_symptoms"] = []
 
 # ================== UI ==================
 st.markdown("""
@@ -505,12 +561,8 @@ with col1:
 
     if free_text.strip():
         if detected_model:
-            pills_html = "".join(
-                f'<span class="symptom-pill">✓ {escape(sym.replace("_", " ").title())}</span>'
-                for sym in detected_model
-            )
             st.markdown(
-                f'<div style="margin-top:.5rem"><div class="small-note">Recognized from text</div>{pills_html}</div>',
+                f'<div style="margin-top:.5rem"><div class="small-note">Recognized from text</div>{render_symptom_pills(detected_model, prefix_check=True)}</div>',
                 unsafe_allow_html=True
             )
         if leftover_text:
@@ -520,13 +572,18 @@ with col1:
             )
 
     b1, b2 = st.columns([3, 1])
+
     with b1:
         diagnose_clicked = st.button("Diagnose", use_container_width=True)
+
     with b2:
         clear_clicked = st.button("Clear", use_container_width=True)
 
     if clear_clicked:
-        st.session_state.clear()
+        st.session_state["selected_display"] = []
+        st.session_state["free_text"] = ""
+        st.session_state["results"] = None
+        st.session_state["used_symptoms"] = []
         st.rerun()
 
     if diagnose_clicked:
@@ -542,63 +599,77 @@ with col1:
             st.warning("Please select symptoms or type symptoms that the system can recognize.")
         else:
             with st.spinner("Analyzing symptoms..."):
-                output = predict_topk_rf(combined_symptoms, k=5)
+                output = predict_topk_rf(tuple(combined_symptoms), k=5)
 
-            if isinstance(output, dict) and "warning" in output:
-                st.warning(output["warning"])
-                results = output["results"]
+            if isinstance(output, dict) and "error" in output:
+                st.error(output["error"])
+                st.session_state["results"] = None
+                st.session_state["used_symptoms"] = []
             else:
-                results = output
+                if isinstance(output, dict) and "warning" in output:
+                    st.warning(output["warning"])
+                    results = output["results"]
+                else:
+                    results = output
 
-            st.session_state["results"] = results
-            st.session_state["used_symptoms"] = combined_symptoms
+                if not results:
+                    st.error("Prediction failed. Please try different symptoms.")
+                    st.session_state["results"] = None
+                    st.session_state["used_symptoms"] = []
+                else:
+                    st.session_state["results"] = results
+                    st.session_state["used_symptoms"] = combined_symptoms
 
-            top_disease, top_conf = results[0]
-            second_conf = results[1][1] if len(results) > 1 else 0.0
-            level, msg = confidence_message(top_conf, second_conf)
+    if st.session_state["results"]:
+        results = st.session_state["results"]
+        combined_symptoms = st.session_state["used_symptoms"]
 
-            st.markdown(f"""
-            <div class="result-card top">
-                <div class="disease-name">{escape(top_disease)}</div>
-                <div class="bar-bg">
-                    <div class="bar" style="width:{top_conf * 100:.1f}%"></div>
-                </div>
-                <p>{top_conf * 100:.1f}% confidence</p>
+        top_disease, top_conf = results[0]
+        second_conf = results[1][1] if len(results) > 1 else 0.0
+        level, msg = confidence_message(top_conf, second_conf)
+
+        st.markdown(f"""
+        <div class="result-card top">
+            <div class="disease-name">{escape(top_disease)}</div>
+            <div class="bar-bg">
+                <div class="bar" style="width:{top_conf * 100:.1f}%"></div>
             </div>
-            """, unsafe_allow_html=True)
+            <p>{top_conf * 100:.1f}% confidence</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-            if level == "good":
-                st.markdown(f'<div class="good-conf">{escape(msg)}</div>', unsafe_allow_html=True)
-            elif level == "medium":
-                st.markdown(f'<div class="med-conf">{escape(msg)}</div>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<div class="low-conf">{escape(msg)}</div>', unsafe_allow_html=True)
+        if level == "good":
+            st.markdown(f'<div class="good-conf">{escape(msg)}</div>', unsafe_allow_html=True)
+        elif level == "medium":
+            st.markdown(f'<div class="med-conf">{escape(msg)}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="low-conf">{escape(msg)}</div>', unsafe_allow_html=True)
 
-            if len(combined_symptoms) < 2:
-                st.warning("Only one symptom was recognized. Results may be weak.")
-            elif len(combined_symptoms) > 8:
-                st.warning("Many symptoms were entered. If they belong to multiple illnesses, accuracy may decrease.")
+        if len(combined_symptoms) < 2:
+            st.warning("Only one symptom was recognized. Results may be weak.")
+        elif len(combined_symptoms) > 8:
+            st.warning("Many symptoms were entered. If they belong to multiple illnesses, accuracy may decrease.")
 
-            disease_key = normalize_disease_key(top_disease)
+        disease_key = normalize_disease_key(top_disease)
 
-            st.subheader("Recognized Symptoms Used")
-            st.write(", ".join([sym.replace("_", " ") for sym in combined_symptoms]))
+        st.subheader("Recognized Symptoms Used")
+        st.markdown(render_symptom_pills(combined_symptoms), unsafe_allow_html=True)
 
-            st.subheader("Description")
-            st.info(desc_map.get(disease_key, "No description available."))
+        st.subheader("Description")
+        st.info(desc_map.get(disease_key, "No description available."))
 
-            st.subheader("Precautions")
-            precautions = prec_map.get(disease_key, [])
-            if precautions:
-                for precaution in precautions:
-                    st.success(precaution)
-            else:
-                st.warning("No precautions available.")
+        st.subheader("Precautions")
+        precautions = prec_map.get(disease_key, [])
+        if precautions:
+            for precaution in precautions:
+                st.success(precaution)
+        else:
+            st.warning("No precautions available.")
 
 with col2:
     st.subheader("Other Possibilities")
 
-    if "results" in st.session_state:
+    if st.session_state["results"]:
         results = st.session_state["results"]
         if len(results) > 1:
             for disease, conf in results[1:]:
