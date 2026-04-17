@@ -359,6 +359,9 @@ MANUAL_ALIASES = {
     "weakness": "fatigue",
     "lack of energy": "fatigue",
 
+    "diarrhea": "diarrhoea",
+    "diarrhoea": "diarrhoea",
+    
     "nausea": "nausea",
     "queasiness": "nausea",
     "vomiting": "vomiting",
@@ -523,8 +526,7 @@ with col1:
         clear_clicked = st.button("Clear", use_container_width=True)
 
     if clear_clicked:
-        st.session_state["selected_display"] = []
-        st.session_state["free_text"] = ""
+        st.session_state.clear()
         st.rerun()
 
     if diagnose_clicked:
