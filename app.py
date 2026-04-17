@@ -1,5 +1,7 @@
 import os
 import re
+from html import escape
+
 import joblib
 import numpy as np
 import pandas as pd
@@ -178,7 +180,7 @@ BASE = os.path.dirname(__file__)
 required_files = [
     "rf_model.pkl",
     "label_encoder.pkl",
-    "feature_columns.pkl"
+    "feature_columns.pkl",
 ]
 
 missing_files = [f for f in required_files if not os.path.exists(os.path.join(BASE, f))]
@@ -203,15 +205,6 @@ def normalize_disease_key(disease_name):
 def normalize_symptom_text(text):
     return str(text).strip().lower().replace("_", " ")
 
-def extract_clean_symptom(feature_name):
-    feature_name = str(feature_name).strip()
-    parts = feature_name.split("_")
-
-    if len(parts) >= 3 and parts[0].lower() == "symptom" and parts[1].isdigit():
-        return " ".join(parts[2:]).strip().lower()
-
-    return feature_name.replace("_", " ").strip().lower()
-
 def confidence_message(top_conf, second_conf):
     gap = top_conf - second_conf
 
@@ -233,12 +226,12 @@ def clean_text_for_match(text):
 # ================== OPTIONAL CSV FILES ==================
 description_file = find_existing_file([
     "symptom_description.csv",
-    "symptom_Description.csv"
+    "symptom_Description.csv",
 ])
 
 precaution_file = find_existing_file([
     "disease_precaution.csv",
-    "Disease precaution.csv"
+    "Disease precaution.csv",
 ])
 
 # ================== LOAD MODELS ==================
@@ -257,60 +250,62 @@ def load_maps():
 
     if description_file is not None:
         desc_df = pd.read_csv(description_file)
-        desc_df["Disease"] = (
-            desc_df["Disease"]
-            .astype(str)
-            .str.strip()
-            .str.lower()
-            .str.replace(" ", "", regex=False)
-        )
-        desc_df["Description"] = desc_df["Description"].astype(str).str.strip()
-        desc_map = dict(zip(desc_df["Disease"], desc_df["Description"]))
+
+        if {"Disease", "Description"}.issubset(desc_df.columns):
+            desc_df["Disease"] = (
+                desc_df["Disease"]
+                .astype(str)
+                .str.strip()
+                .str.lower()
+                .str.replace(" ", "", regex=False)
+            )
+            desc_df["Description"] = desc_df["Description"].astype(str).str.strip()
+            desc_map = dict(zip(desc_df["Disease"], desc_df["Description"]))
 
     if precaution_file is not None:
         prec_df = pd.read_csv(precaution_file)
-        prec_df["Disease"] = (
-            prec_df["Disease"]
-            .astype(str)
-            .str.strip()
-            .str.lower()
-            .str.replace(" ", "", regex=False)
-        )
 
-        for _, row in prec_df.iterrows():
-            disease = row["Disease"]
-            precautions = row[1:].dropna().astype(str).str.strip().tolist()
-            prec_map[disease] = precautions
+        if "Disease" in prec_df.columns:
+            prec_df["Disease"] = (
+                prec_df["Disease"]
+                .astype(str)
+                .str.strip()
+                .str.lower()
+                .str.replace(" ", "", regex=False)
+            )
+
+            for _, row in prec_df.iterrows():
+                disease = row["Disease"]
+                precautions = row[1:].dropna().astype(str).str.strip().tolist()
+                prec_map[disease] = precautions
 
     return desc_map, prec_map
 
 rf, le, feature_columns = load_models()
 desc_map, prec_map = load_maps()
 
-# ================== SYMPTOM MAP FROM MODEL FEATURES ==================
-symptom_to_columns = {}
-for col in feature_columns:
-    clean_symptom = extract_clean_symptom(col)
-    if clean_symptom and clean_symptom != "none":
-        symptom_to_columns.setdefault(clean_symptom, []).append(col)
+# ================== SYMPTOMS LIST ==================
+# In your final pipeline, feature_columns.pkl stores all_symptoms,
+# so each item is already a symptom name like "headache", "high_fever", etc.
+feature_columns = [str(x).strip() for x in feature_columns if str(x).strip()]
+symptoms_list = sorted(
+    [normalize_symptom_text(s) for s in feature_columns if normalize_symptom_text(s) != "none"]
+)
 
-symptoms_list = sorted(symptom_to_columns.keys())
+feature_index = {normalize_symptom_text(sym): i for i, sym in enumerate(feature_columns)}
 
 # ================== AUTO-GENERATED ALIAS MAP ==================
 MANUAL_ALIASES = {
-    # urination-related
     "frequent urination": "polyuria",
     "urinating frequently": "polyuria",
     "pee a lot": "polyuria",
     "excessive urination": "polyuria",
 
-    # burning urination
     "burning urination": "burning micturition",
     "pain urinating": "burning micturition",
     "painful urination": "burning micturition",
     "burning while urinating": "burning micturition",
 
-    # fever
     "fever": "high fever",
     "high fever": "high fever",
     "very high fever": "high fever",
@@ -318,7 +313,6 @@ MANUAL_ALIASES = {
     "low fever": "mild fever",
     "slight fever": "mild fever",
 
-    # sweating / chills
     "sweat": "sweating",
     "sweating": "sweating",
     "night sweats": "sweating",
@@ -327,19 +321,16 @@ MANUAL_ALIASES = {
     "shivering": "chills",
     "shivers": "chills",
 
-    # cold hands and feet
     "cold hands": "cold hands and feets",
     "cold feet": "cold hands and feets",
     "cold hands and feet": "cold hands and feets",
 
-    # vision and light
     "light sensitivity": "visual disturbances",
     "sensitivity to light": "visual disturbances",
     "blurred vision": "blurred and distorted vision",
     "blurry vision": "blurred and distorted vision",
     "blurred and distorted vision": "blurred and distorted vision",
 
-    # throat and nose
     "runny nose": "runny nose",
     "blocked nose": "congestion",
     "nasal congestion": "congestion",
@@ -347,7 +338,6 @@ MANUAL_ALIASES = {
     "throat pain": "throat irritation",
     "throat irritation": "throat irritation",
 
-    # pain-related
     "joint pain": "joint pain",
     "joint ache": "joint pain",
     "muscle pain": "muscle pain",
@@ -365,26 +355,22 @@ MANUAL_ALIASES = {
     "lower back pain": "back pain",
     "hip pain": "hip joint pain",
 
-    # headache and migraine
     "headache": "headache",
     "head ache": "headache",
     "head pain": "headache",
     "migraine": "headache",
 
-    # energy
     "fatigue": "fatigue",
     "tiredness": "fatigue",
     "tired": "fatigue",
     "weakness": "fatigue",
     "lack of energy": "fatigue",
 
-    # nausea and vomiting
     "nausea": "nausea",
     "queasiness": "nausea",
     "vomiting": "vomiting",
     "throwing up": "vomiting",
 
-    # cough and breathing
     "cough": "cough",
     "dry cough": "cough",
     "wet cough": "cough",
@@ -394,15 +380,13 @@ MANUAL_ALIASES = {
     "difficulty breathing": "breathlessness",
     "can't breathe": "breathlessness",
 
-    # sneezing and congestion
     "sneezing": "continuous sneezing",
     "continuous sneezing": "continuous sneezing",
 
-    # dizziness and lightheadedness
     "dizziness": "dizziness",
     "dizzy": "dizziness",
     "lightheaded": "dizziness",
-    "lightheadedness": "dizziness"
+    "lightheadedness": "dizziness",
 }
 
 @st.cache_data
@@ -446,7 +430,7 @@ def extract_symptoms_from_text(text):
     for alias in sorted_aliases:
         pattern = r"\b" + re.escape(alias) + r"\b"
 
-        if re.search(pattern, remaining) or alias in remaining:
+        if re.search(pattern, remaining):
             canonical = alias_map[alias]
 
             if canonical not in detected:
@@ -460,23 +444,21 @@ def extract_symptoms_from_text(text):
 
 # ================== PREDICTION ==================
 def predict_topk_rf(selected_symptoms, k=5):
-    input_dict = {col: 0 for col in feature_columns}
+    input_vector = np.zeros((1, len(feature_columns)), dtype=np.float32)
 
     matched_count = 0
 
     for symptom in selected_symptoms:
         clean_symptom = normalize_symptom_text(symptom)
-        matching_columns = symptom_to_columns.get(clean_symptom, [])
 
-        if matching_columns:
+        if clean_symptom in feature_index:
+            idx = feature_index[clean_symptom]
+            input_vector[0, idx] = 1.0
             matched_count += 1
 
-        for col in matching_columns:
-            input_dict[col] = 1
+    probabilities = rf.predict_proba(input_vector)[0]
 
-    input_df = pd.DataFrame([input_dict])
-
-    probabilities = rf.predict_proba(input_df)[0]
+    k = min(k, len(probabilities))
     top_indices = np.argsort(probabilities)[::-1][:k]
 
     results = []
@@ -486,6 +468,7 @@ def predict_topk_rf(selected_symptoms, k=5):
         results.append((disease_name, confidence))
 
     top_conf = results[0][1]
+    second_conf = results[1][1] if len(results) > 1 else 0.0
 
     if matched_count <= 1:
         return {
@@ -493,9 +476,9 @@ def predict_topk_rf(selected_symptoms, k=5):
             "results": results
         }
 
-    if top_conf < 0.30:
+    if top_conf < 0.35 or (top_conf - second_conf) < 0.10:
         return {
-            "warning": "Symptoms do not clearly match a specific disease. Please refine input.",
+            "warning": "Low confidence prediction. Try adding clearer symptoms.",
             "results": results
         }
 
@@ -541,7 +524,7 @@ with col1:
     if free_text.strip():
         if detected_from_text:
             pills_html = "".join(
-                f'<span class="symptom-pill">✓ {symptom.title()}</span>'
+                f'<span class="symptom-pill">✓ {escape(symptom.title())}</span>'
                 for symptom in detected_from_text
             )
             st.markdown(
@@ -550,7 +533,7 @@ with col1:
             )
         if leftover_text:
             st.markdown(
-                f'<div class="unknown-box">Some text was not recognized: <b>{leftover_text}</b></div>',
+                f'<div class="unknown-box">Some text was not recognized: <b>{escape(leftover_text)}</b></div>',
                 unsafe_allow_html=True
             )
 
@@ -580,7 +563,7 @@ with col1:
 
             st.markdown(f"""
             <div class="result-card top">
-                <div class="disease-name">{top_disease}</div>
+                <div class="disease-name">{escape(top_disease)}</div>
                 <div class="bar-bg">
                     <div class="bar" style="width:{top_conf * 100:.1f}%"></div>
                 </div>
@@ -589,11 +572,11 @@ with col1:
             """, unsafe_allow_html=True)
 
             if level == "good":
-                st.markdown(f'<div class="good-conf">{msg}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="good-conf">{escape(msg)}</div>', unsafe_allow_html=True)
             elif level == "medium":
-                st.markdown(f'<div class="med-conf">{msg}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="med-conf">{escape(msg)}</div>', unsafe_allow_html=True)
             else:
-                st.markdown(f'<div class="low-conf">{msg}</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="low-conf">{escape(msg)}</div>', unsafe_allow_html=True)
 
             if len(combined_symptoms) < 2:
                 st.warning("Only one symptom was recognized. Results may be weak.")
@@ -626,7 +609,7 @@ with col2:
             for disease, conf in results[1:]:
                 st.markdown(f"""
                 <div class="result-card">
-                    <b>{disease}</b><br>
+                    <b>{escape(disease)}</b><br>
                     <span class="small-note">{conf * 100:.1f}% confidence</span>
                 </div>
                 """, unsafe_allow_html=True)
