@@ -184,7 +184,6 @@ required_files = [
 ]
 
 missing_files = [f for f in required_files if not os.path.exists(os.path.join(BASE, f))]
-
 if missing_files:
     st.error("Missing required files:")
     for f in missing_files:
@@ -199,15 +198,17 @@ def find_existing_file(candidates):
             return path
     return None
 
+def clean_text_for_match(text):
+    text = str(text).lower().strip()
+    text = text.replace("_", " ")
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
 def normalize_disease_key(disease_name):
     return str(disease_name).strip().lower().replace(" ", "")
 
-def normalize_symptom_text(text):
-    return str(text).strip().lower().replace("_", " ")
-
 def confidence_message(top_conf, second_conf):
     gap = top_conf - second_conf
-
     if top_conf >= 0.50:
         return "good", "Strong confidence prediction."
     if top_conf >= 0.35 and gap >= 0.10:
@@ -215,13 +216,6 @@ def confidence_message(top_conf, second_conf):
     if top_conf >= 0.20:
         return "medium", "Moderate confidence. Adding more symptoms may improve the result."
     return "low", "Low confidence. Add more relevant symptoms for a better prediction."
-
-def clean_text_for_match(text):
-    text = str(text).lower().strip()
-    text = text.replace("_", " ")
-    text = re.sub(r"[^a-z0-9\s]", " ", text)
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
 
 # ================== OPTIONAL CSV FILES ==================
 description_file = find_existing_file([
@@ -239,8 +233,8 @@ precaution_file = find_existing_file([
 def load_models():
     rf_model = joblib.load(os.path.join(BASE, "rf_model.pkl"))
     label_encoder = joblib.load(os.path.join(BASE, "label_encoder.pkl"))
-    feature_cols = joblib.load(os.path.join(BASE, "feature_columns.pkl"))
-    return rf_model, label_encoder, feature_cols
+    display_feature_cols = joblib.load(os.path.join(BASE, "feature_columns.pkl"))
+    return rf_model, label_encoder, display_feature_cols
 
 # ================== LOAD MAPS ==================
 @st.cache_data
@@ -250,7 +244,6 @@ def load_maps():
 
     if description_file is not None:
         desc_df = pd.read_csv(description_file)
-
         if {"Disease", "Description"}.issubset(desc_df.columns):
             desc_df["Disease"] = (
                 desc_df["Disease"]
@@ -264,7 +257,6 @@ def load_maps():
 
     if precaution_file is not None:
         prec_df = pd.read_csv(precaution_file)
-
         if "Disease" in prec_df.columns:
             prec_df["Disease"] = (
                 prec_df["Disease"]
@@ -273,7 +265,6 @@ def load_maps():
                 .str.lower()
                 .str.replace(" ", "", regex=False)
             )
-
             for _, row in prec_df.iterrows():
                 disease = row["Disease"]
                 precautions = row[1:].dropna().astype(str).str.strip().tolist()
@@ -281,20 +272,25 @@ def load_maps():
 
     return desc_map, prec_map
 
-rf, le, feature_columns = load_models()
+rf, le, display_features = load_models()
 desc_map, prec_map = load_maps()
 
-# ================== SYMPTOMS LIST ==================
-# In your final pipeline, feature_columns.pkl stores all_symptoms,
-# so each item is already a symptom name like "headache", "high_fever", etc.
-feature_columns = [str(x).strip() for x in feature_columns if str(x).strip()]
-symptoms_list = sorted(
-    [normalize_symptom_text(s) for s in feature_columns if normalize_symptom_text(s) != "none"]
-)
+# ================== FEATURE MAPPING ==================
+display_features = [
+    clean_text_for_match(x)
+    for x in display_features
+    if clean_text_for_match(x) and clean_text_for_match(x) != "none"
+]
 
-feature_index = {normalize_symptom_text(sym): i for i, sym in enumerate(feature_columns)}
+# model was trained on underscore names in the same order
+model_features = [x.replace(" ", "_") for x in display_features]
 
-# ================== AUTO-GENERATED ALIAS MAP ==================
+display_to_model = {
+    disp: model for disp, model in zip(display_features, model_features)
+}
+feature_index = {model: i for i, model in enumerate(model_features)}
+
+# ================== ALIASES ==================
 MANUAL_ALIASES = {
     "frequent urination": "polyuria",
     "urinating frequently": "polyuria",
@@ -314,7 +310,6 @@ MANUAL_ALIASES = {
     "slight fever": "mild fever",
 
     "sweat": "sweating",
-    "sweating": "sweating",
     "night sweats": "sweating",
     "chill": "chills",
     "chills": "chills",
@@ -329,14 +324,12 @@ MANUAL_ALIASES = {
     "sensitivity to light": "visual disturbances",
     "blurred vision": "blurred and distorted vision",
     "blurry vision": "blurred and distorted vision",
-    "blurred and distorted vision": "blurred and distorted vision",
 
     "runny nose": "runny nose",
     "blocked nose": "congestion",
     "nasal congestion": "congestion",
     "sore throat": "throat irritation",
     "throat pain": "throat irritation",
-    "throat irritation": "throat irritation",
 
     "joint pain": "joint pain",
     "joint ache": "joint pain",
@@ -378,7 +371,7 @@ MANUAL_ALIASES = {
     "breathlessness": "breathlessness",
     "shortness of breath": "breathlessness",
     "difficulty breathing": "breathlessness",
-    "can't breathe": "breathlessness",
+    "can t breathe": "breathlessness",
 
     "sneezing": "continuous sneezing",
     "continuous sneezing": "continuous sneezing",
@@ -389,78 +382,53 @@ MANUAL_ALIASES = {
     "lightheadedness": "dizziness",
 }
 
-@st.cache_data
-def build_alias_map(symptoms):
-    alias_map = {}
+alias_to_display = {}
+for disp in display_features:
+    alias_to_display[clean_text_for_match(disp)] = disp
+    alias_to_display[clean_text_for_match(disp).replace(" ", "")] = disp
+    alias_to_display[clean_text_for_match(disp).replace(" ", "_")] = disp
 
-    for symptom in symptoms:
-        s = clean_text_for_match(symptom)
+for alias, target in MANUAL_ALIASES.items():
+    alias_clean = clean_text_for_match(alias)
+    target_clean = clean_text_for_match(target)
+    if target_clean in display_to_model:
+        alias_to_display[alias_clean] = target_clean
 
-        alias_map[s] = symptom
-        alias_map[s.replace(" ", "_")] = symptom
+sorted_aliases = sorted(alias_to_display.keys(), key=len, reverse=True)
 
-        if s.endswith("s"):
-            alias_map[s[:-1]] = symptom
-        else:
-            alias_map[s + "s"] = symptom
-
-        alias_map[s.replace(" and ", " ")] = symptom
-        alias_map[s.replace(" ", "")] = symptom
-
-    for alias, target in MANUAL_ALIASES.items():
-        alias_clean = clean_text_for_match(alias)
-        target_clean = clean_text_for_match(target)
-        if target_clean in symptoms:
-            alias_map[alias_clean] = target_clean
-
-    return alias_map
-
-alias_map = build_alias_map(symptoms_list)
-sorted_aliases = sorted(alias_map.keys(), key=len, reverse=True)
-
+# ================== TEXT MATCHING ==================
 def extract_symptoms_from_text(text):
     cleaned = clean_text_for_match(text)
-
     if not cleaned:
         return [], ""
 
-    detected = []
+    detected_model = []
     remaining = cleaned
 
-    input_words = set(cleaned.split())
+    for alias in sorted_aliases:
+        display_symptom = alias_to_display[alias]
+        model_symptom = display_to_model[display_symptom]
+        pattern = r"\b" + re.escape(alias) + r"\b"
 
-    for symptom in feature_columns:
-
-        symptom_words = set(clean_text_for_match(symptom).split())
-
-        # 🔥 word-overlap matching instead of exact phrase
-        if symptom_words.issubset(input_words):
-            if symptom not in detected:
-                detected.append(symptom)
-
-            for word in symptom_words:
-                remaining = remaining.replace(word, " ")
+        if re.search(pattern, remaining):
+            if model_symptom not in detected_model:
+                detected_model.append(model_symptom)
+            remaining = re.sub(pattern, " ", remaining, count=1)
 
     remaining = re.sub(r"\s+", " ", remaining).strip()
-
-    return detected, remaining
+    return detected_model, remaining
 
 # ================== PREDICTION ==================
-def predict_topk_rf(selected_symptoms, k=5):
-    input_vector = np.zeros((1, len(feature_columns)), dtype=np.float32)
-
+def predict_topk_rf(selected_model_symptoms, k=5):
+    input_vector = np.zeros((1, len(model_features)), dtype=np.float32)
     matched_count = 0
 
-    for symptom in selected_symptoms:
-        clean_symptom = normalize_symptom_text(symptom)
-
-        if clean_symptom in feature_index:
-            idx = feature_index[clean_symptom]
-            input_vector[0, idx] = 1.0
+    for symptom in selected_model_symptoms:
+        if symptom in feature_index:
+            input_vector[0, feature_index[symptom]] = 1.0
             matched_count += 1
 
     probabilities = rf.predict_proba(input_vector)[0]
-
     k = min(k, len(probabilities))
     top_indices = np.argsort(probabilities)[::-1][:k]
 
@@ -487,6 +455,12 @@ def predict_topk_rf(selected_symptoms, k=5):
 
     return results
 
+# ================== UI STATE ==================
+if "selected_display" not in st.session_state:
+    st.session_state["selected_display"] = []
+if "free_text" not in st.session_state:
+    st.session_state["free_text"] = ""
+
 # ================== UI ==================
 st.markdown("""
 <div class="hero">
@@ -507,28 +481,30 @@ with col1:
     </div>
     """, unsafe_allow_html=True)
 
-    selected = st.multiselect(
+    selected_display = st.multiselect(
         "Symptoms",
-        symptoms_list,
+        display_features,
         placeholder="Choose symptoms from the list...",
         help="Start typing to search and select symptoms from the list",
         max_selections=10,
-        label_visibility="collapsed"
+        label_visibility="collapsed",
+        key="selected_display"
     )
 
     free_text = st.text_area(
         "Or type symptoms naturally",
         placeholder="e.g. high fever, headache, blurred vision, frequent urination",
-        height=110
+        height=110,
+        key="free_text"
     )
 
-    detected_from_text, leftover_text = extract_symptoms_from_text(free_text)
+    detected_model, leftover_text = extract_symptoms_from_text(free_text)
 
     if free_text.strip():
-        if detected_from_text:
+        if detected_model:
             pills_html = "".join(
-                f'<span class="symptom-pill">✓ {escape(symptom.title())}</span>'
-                for symptom in detected_from_text
+                f'<span class="symptom-pill">✓ {escape(sym.replace("_", " ").title())}</span>'
+                for sym in detected_model
             )
             st.markdown(
                 f'<div style="margin-top:.5rem"><div class="small-note">Recognized from text</div>{pills_html}</div>',
@@ -540,10 +516,25 @@ with col1:
                 unsafe_allow_html=True
             )
 
-    diagnose_clicked = st.button("Diagnose")
+    b1, b2 = st.columns([3, 1])
+    with b1:
+        diagnose_clicked = st.button("Diagnose", use_container_width=True)
+    with b2:
+        clear_clicked = st.button("Clear", use_container_width=True)
+
+    if clear_clicked:
+        st.session_state["selected_display"] = []
+        st.session_state["free_text"] = ""
+        st.rerun()
 
     if diagnose_clicked:
-        combined_symptoms = list(dict.fromkeys(selected + detected_from_text))
+        selected_model = [
+            display_to_model[clean_text_for_match(s)]
+            for s in selected_display
+            if clean_text_for_match(s) in display_to_model
+        ]
+
+        combined_symptoms = list(dict.fromkeys(selected_model + detected_model))
 
         if not combined_symptoms:
             st.warning("Please select symptoms or type symptoms that the system can recognize.")
@@ -589,7 +580,7 @@ with col1:
             disease_key = normalize_disease_key(top_disease)
 
             st.subheader("Recognized Symptoms Used")
-            st.write(", ".join(combined_symptoms))
+            st.write(", ".join([sym.replace("_", " ") for sym in combined_symptoms]))
 
             st.subheader("Description")
             st.info(desc_map.get(disease_key, "No description available."))
@@ -607,7 +598,6 @@ with col2:
 
     if "results" in st.session_state:
         results = st.session_state["results"]
-
         if len(results) > 1:
             for disease, conf in results[1:]:
                 st.markdown(f"""
