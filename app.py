@@ -1,5 +1,6 @@
 import os
 import re
+from difflib import get_close_matches
 from html import escape
 from typing import Dict, List, Tuple, Optional, Union
 
@@ -171,6 +172,24 @@ st.markdown("""
     font-size: 0.85rem;
 }
 
+.reason-box {
+    background: rgba(56, 189, 248, .08);
+    border: 1px solid rgba(56, 189, 248, .20);
+    border-radius: 14px;
+    padding: 12px;
+    margin-bottom: 10px;
+}
+
+.typo-box {
+    background: rgba(168, 85, 247, .10);
+    border: 1px solid rgba(168, 85, 247, .28);
+    border-radius: 12px;
+    padding: 10px 12px;
+    color: #d8b4fe;
+    margin-top: 10px;
+    font-size: 0.85rem;
+}
+
 .footer {
     text-align: center;
     color: #64748b;
@@ -192,11 +211,20 @@ def find_existing_file(candidates: List[str]) -> Optional[str]:
             return path
     return None
 
+
 def clean_text_for_match(text: str) -> str:
     text = str(text).lower().strip()
     text = text.replace("_", " ")
+    text = text.replace("/", " ")
+    text = text.replace("-", " ")
+    text = text.replace("&", " and ")
+    text = re.sub(r"\bcan['’]?t\b", "cant", text)
+    text = re.sub(r"\bwon['’]?t\b", "wont", text)
+    text = re.sub(r"\bdoesn['’]?t\b", "doesnt", text)
+    text = re.sub(r"\bdon['’]?t\b", "dont", text)
     text = re.sub(r"[^a-z0-9\s]", " ", text)
     return re.sub(r"\s+", " ", text).strip()
+
 
 def normalize_disease_key(disease_name: str) -> str:
     return (
@@ -206,6 +234,7 @@ def normalize_disease_key(disease_name: str) -> str:
         .replace(" ", "")
         .replace("_", "")
     )
+
 
 def confidence_message(top_conf: float, second_conf: float) -> Tuple[str, str]:
     gap = top_conf - second_conf
@@ -218,6 +247,7 @@ def confidence_message(top_conf: float, second_conf: float) -> Tuple[str, str]:
         return "medium", "Moderate confidence. Adding more symptoms may improve the result."
     return "low", "Low confidence. Add more relevant symptoms for a better prediction."
 
+
 def render_symptom_pills(symptoms: List[str], prefix_check: bool = False) -> str:
     pills = []
     for sym in symptoms:
@@ -226,6 +256,21 @@ def render_symptom_pills(symptoms: List[str], prefix_check: bool = False) -> str
             label = f"✓ {label}"
         pills.append(f'<span class="symptom-pill">{label}</span>')
     return "".join(pills)
+
+
+def tokenize_text(text: str) -> List[str]:
+    return [tok for tok in clean_text_for_match(text).split() if tok]
+
+
+def build_ngrams(tokens: List[str], min_n: int = 1, max_n: int = 4) -> List[str]:
+    phrases: List[str] = []
+    if not tokens:
+        return phrases
+    max_n = min(max_n, len(tokens))
+    for n in range(min_n, max_n + 1):
+        for i in range(len(tokens) - n + 1):
+            phrases.append(" ".join(tokens[i:i + n]))
+    return phrases
 
 # ==============================
 # 4) FILE DISCOVERY
@@ -324,106 +369,205 @@ except Exception as e:
 # 7) FEATURE MAPPING
 # ==============================
 display_to_model: Dict[str, str] = {}
+model_to_display: Dict[str, str] = {}
+cleaned_to_original_display: Dict[str, str] = {}
+
 for disp, model in zip(display_features, model_features):
-    display_to_model[clean_text_for_match(disp)] = model
+    cleaned_disp = clean_text_for_match(disp)
+    display_to_model[cleaned_disp] = model
+    model_to_display[model] = cleaned_disp
+    cleaned_to_original_display[cleaned_disp] = disp
 
 feature_index = {model: i for i, model in enumerate(model_features)}
+canonical_display_keys = list(display_to_model.keys())
 
 # ==============================
 # 8) ALIASES / NORMALIZATION RULES
 # ==============================
 MANUAL_ALIASES = {
-    "frequent urination": "polyuria",
-    "urinating frequently": "polyuria",
-    "pee a lot": "polyuria",
-    "excessive urination": "polyuria",
-
-    "burning urination": "burning micturition",
-    "pain urinating": "burning micturition",
-    "painful urination": "burning micturition",
-    "burning while urinating": "burning micturition",
-
     "fever": "high fever",
     "high fever": "high fever",
     "very high fever": "high fever",
+    "temperature": "high fever",
+    "high temperature": "high fever",
+    "raised temperature": "high fever",
+    "running a temperature": "high fever",
+    "feverish": "high fever",
+    "hot body": "high fever",
+    "body hot": "high fever",
+    "burning body": "high fever",
     "mild fever": "mild fever",
     "low fever": "mild fever",
     "slight fever": "mild fever",
 
-    "sweat": "sweating",
-    "night sweats": "sweating",
     "chill": "chills",
     "chills": "chills",
     "shivering": "chills",
     "shivers": "chills",
+    "rigors": "chills",
+    "night sweats": "sweating",
+    "sweat": "sweating",
+    "sweats": "sweating",
+    "heavy sweating": "sweating",
+    "excess sweating": "sweating",
+    "sweating heavily": "sweating",
 
-    "cold hands": "cold hands and feets",
-    "cold feet": "cold hands and feets",
-    "cold hands and feet": "cold hands and feets",
-
-    "light sensitivity": "visual disturbances",
-    "sensitivity to light": "visual disturbances",
-    "blurred vision": "blurred and distorted vision",
-    "blurry vision": "blurred and distorted vision",
-
-    "runny nose": "runny nose",
-    "blocked nose": "congestion",
-    "nasal congestion": "congestion",
-    "sore throat": "throat irritation",
-    "throat pain": "throat irritation",
-
-    "joint pain": "joint pain",
-    "joint ache": "joint pain",
-    "muscle pain": "muscle pain",
-    "body ache": "muscle pain",
-    "body pain": "muscle pain",
-    "chest pain": "chest pain",
-    "chest ache": "chest pain",
-    "chest discomfort": "chest pain",
-    "stomach pain": "stomach pain",
-    "stomach ache": "stomach pain",
-    "belly pain": "abdominal pain",
-    "belly ache": "abdominal pain",
-    "abdominal pain": "abdominal pain",
-    "back pain": "back pain",
-    "lower back pain": "back pain",
-    "hip pain": "hip joint pain",
-
-    "headache": "headache",
     "head ache": "headache",
     "head pain": "headache",
+    "pain in head": "headache",
     "migraine": "headache",
+    "severe headache": "headache",
+    "bad headache": "headache",
+    "pain behind eyes": "headache",
+    "pain behind the eyes": "headache",
+    "eye pain": "headache",
+    "eye pressure": "headache",
 
-    "fatigue": "fatigue",
-    "tiredness": "fatigue",
+    "blurred vision": "blurred and distorted vision",
+    "blurry vision": "blurred and distorted vision",
+    "vision problems": "blurred and distorted vision",
+    "vision issue": "blurred and distorted vision",
+    "vision issues": "blurred and distorted vision",
+    "distorted vision": "blurred and distorted vision",
+    "light sensitivity": "visual disturbances",
+    "sensitivity to light": "visual disturbances",
+    "sensitive to light": "visual disturbances",
+    "seeing flashing lights": "visual disturbances",
+    "seeing spots": "visual disturbances",
+
     "tired": "fatigue",
+    "tiredness": "fatigue",
     "weakness": "fatigue",
+    "feeling weak": "fatigue",
+    "very tired": "fatigue",
+    "extreme tiredness": "fatigue",
+    "exhausted": "fatigue",
+    "low energy": "fatigue",
+    "body weakness": "fatigue",
+    "general weakness": "fatigue",
+    "feeling tired": "fatigue",
     "lack of energy": "fatigue",
+
+    "shortness of breath": "breathlessness",
+    "short breath": "breathlessness",
+    "difficulty breathing": "breathlessness",
+    "trouble breathing": "breathlessness",
+    "cant breathe": "breathlessness",
+    "can t breathe": "breathlessness",
+    "breathing problem": "breathlessness",
+    "hard to breathe": "breathlessness",
+    "breathless": "breathlessness",
 
     "diarrhea": "diarrhoea",
     "diarrhoea": "diarrhoea",
+    "loose motion": "diarrhoea",
+    "runny stool": "diarrhoea",
+    "loose stools": "diarrhoea",
+    "watery stool": "diarrhoea",
+    "watery stools": "diarrhoea",
 
-    "nausea": "nausea",
-    "queasiness": "nausea",
+    "vomit": "vomiting",
     "vomiting": "vomiting",
     "throwing up": "vomiting",
+    "threw up": "vomiting",
+    "feel like vomiting": "nausea",
+    "feeling like vomiting": "nausea",
+    "want to vomit": "nausea",
+    "queasy": "nausea",
+    "queasiness": "nausea",
+    "sick to my stomach": "nausea",
 
-    "cough": "cough",
+    "stomach ache": "abdominal pain",
+    "stomach cramps": "abdominal pain",
+    "belly pain": "abdominal pain",
+    "belly ache": "abdominal pain",
+    "tummy pain": "abdominal pain",
+    "tummy ache": "abdominal pain",
+    "abdomen pain": "abdominal pain",
+    "pain in abdomen": "abdominal pain",
+    "pain in stomach": "stomach pain",
+    "stomach pain": "stomach pain",
+
+    "loss of appetite": "loss of appetite",
+    "no appetite": "loss of appetite",
+    "not eating": "loss of appetite",
+    "reduced appetite": "loss of appetite",
+    "poor appetite": "loss of appetite",
+
+    "body pain": "muscle pain",
+    "body ache": "muscle pain",
+    "muscle ache": "muscle pain",
+    "whole body pain": "muscle pain",
+    "body soreness": "muscle pain",
+    "muscle soreness": "muscle pain",
+
+    "joint ache": "joint pain",
+    "bone pain": "joint pain",
+    "pain in joints": "joint pain",
+    "aching joints": "joint pain",
+    "severe joint pain": "joint pain",
+
+    "chest ache": "chest pain",
+    "pressure in chest": "chest pain",
+    "tight chest": "chest pain",
+    "chest discomfort": "chest pain",
+
+    "back ache": "back pain",
+    "lower back ache": "back pain",
+    "low back pain": "back pain",
+
+    "skin rash": "rash",
+    "red spots": "rash",
+    "red patch": "rash",
+    "red patches": "rash",
+    "itchy skin": "itching",
+    "skin itching": "itching",
+    "itching skin": "itching",
+
+    "fast heartbeat": "fast heart rate",
+    "heart racing": "fast heart rate",
+    "rapid heartbeat": "fast heart rate",
+    "heart beating fast": "fast heart rate",
+    "palpitations": "fast heart rate",
+
+    "dizzy": "dizziness",
+    "feeling dizzy": "dizziness",
+    "lightheaded": "dizziness",
+    "light headed": "dizziness",
+    "faint feeling": "dizziness",
+    "feel faint": "dizziness",
+
+    "frequent urination": "polyuria",
+    "urinating frequently": "polyuria",
+    "pee a lot": "polyuria",
+    "peeing a lot": "polyuria",
+    "excessive urination": "polyuria",
+    "frequent peeing": "polyuria",
+
+    "burning urination": "burning micturition",
+    "burning while urinating": "burning micturition",
+    "painful urination": "burning micturition",
+    "pain when urinating": "burning micturition",
+
+    "runny nose": "runny nose",
+    "blocked nose": "congestion",
+    "stuffy nose": "congestion",
+    "nasal congestion": "congestion",
+    "sore throat": "throat irritation",
+    "throat pain": "throat irritation",
+    "itchy throat": "throat irritation",
+    "coughing": "cough",
     "dry cough": "cough",
     "wet cough": "cough",
-    "coughing": "cough",
-    "breathlessness": "breathlessness",
-    "shortness of breath": "breathlessness",
-    "difficulty breathing": "breathlessness",
-    "can t breathe": "breathlessness",
 
-    "sneezing": "continuous sneezing",
-    "continuous sneezing": "continuous sneezing",
+    "yellow eyes": "yellowish skin",
+    "yellowing eyes": "yellowish skin",
+    "yellow skin": "yellowish skin",
+    "skin turning yellow": "yellowish skin",
 
-    "dizziness": "dizziness",
-    "dizzy": "dizziness",
-    "lightheaded": "dizziness",
-    "lightheadedness": "dizziness",
+    "high fever with chills": "chills",
+    "muscle and bone pain": "muscle pain",
+    "pain all over body": "muscle pain",
 }
 
 alias_to_display: Dict[str, str] = {}
@@ -440,25 +584,131 @@ for alias, target in MANUAL_ALIASES.items():
 
     if target_clean in display_to_model:
         alias_to_display[alias_clean] = target_clean
+        alias_to_display[alias_clean.replace(" ", "")] = target_clean
+        alias_to_display[alias_clean.replace(" ", "_")] = target_clean
     elif target_clean.replace(" ", "") in display_to_model:
         alias_to_display[alias_clean] = target_clean.replace(" ", "")
 
 sorted_aliases = sorted(alias_to_display.keys(), key=len, reverse=True)
 
 # ==============================
-# 9) TEXT MATCHING (FINAL FIXED)
+# 9) TEXT MATCHING
 # ==============================
-def extract_symptoms_from_text(text: str) -> Tuple[List[str], str]:
-    cleaned = clean_text_for_match(text)
+@st.cache_data
+def build_typo_token_pool() -> List[str]:
+    token_pool = set()
+    for phrase in canonical_display_keys + list(alias_to_display.keys()):
+        for token in tokenize_text(phrase):
+            if len(token) >= 3:
+                token_pool.add(token)
+    return sorted(token_pool)
+
+
+TYPO_TOKEN_POOL = build_typo_token_pool()
+
+
+def auto_correct_text_input(raw_text: str) -> Tuple[str, List[Tuple[str, str]]]:
+    cleaned = clean_text_for_match(raw_text)
     if not cleaned:
-        return [], ""
+        return "", []
+
+    tokens = cleaned.split()
+    corrected_tokens: List[str] = []
+    corrections: List[Tuple[str, str]] = []
+
+    for token in tokens:
+        corrected = token
+        if len(token) >= 4 and token not in TYPO_TOKEN_POOL:
+            close = get_close_matches(token, TYPO_TOKEN_POOL, n=1, cutoff=0.78)
+            if close:
+                corrected = close[0]
+
+        corrected_tokens.append(corrected)
+        if corrected != token:
+            corrections.append((token, corrected))
+
+    corrected_text = " ".join(corrected_tokens)
+    return corrected_text, corrections
+
+
+def add_detected_symptom(model_symptom: str, detected_model: List[str]) -> None:
+    if model_symptom and model_symptom not in detected_model:
+        detected_model.append(model_symptom)
+
+
+def partial_token_match_candidates(cleaned_text: str, detected_model: List[str]) -> None:
+    text_tokens = set(tokenize_text(cleaned_text))
+    if not text_tokens:
+        return
+
+    for display_key, model_symptom in display_to_model.items():
+        if model_symptom in detected_model:
+            continue
+
+        feature_tokens = set(display_key.split())
+        if not feature_tokens:
+            continue
+
+        overlap = len(feature_tokens & text_tokens)
+        min_needed = 1 if len(feature_tokens) == 1 else max(2, int(np.ceil(len(feature_tokens) * 0.6)))
+
+        if overlap >= min_needed:
+            add_detected_symptom(model_symptom, detected_model)
+
+
+def fuzzy_phrase_match_candidates(cleaned_text: str, detected_model: List[str]) -> None:
+    tokens = tokenize_text(cleaned_text)
+    if not tokens:
+        return
+
+    candidate_pool = list(alias_to_display.keys())
+    ngrams = build_ngrams(tokens, 1, 4)
+
+    for phrase in ngrams:
+        close = get_close_matches(phrase, candidate_pool, n=1, cutoff=0.90)
+        if not close:
+            continue
+
+        matched_alias = close[0]
+        display_key = alias_to_display.get(matched_alias)
+        if not display_key:
+            continue
+
+        model_symptom = display_to_model.get(display_key)
+        if model_symptom:
+            add_detected_symptom(model_symptom, detected_model)
+
+
+def closest_suggestions_for_unknown(leftover_text: str, max_suggestions: int = 6) -> List[str]:
+    tokens = tokenize_text(leftover_text)
+    if not tokens:
+        return []
+
+    ngrams = build_ngrams(tokens, 1, 4)
+    suggestions: List[str] = []
+
+    for phrase in ngrams:
+        close = get_close_matches(phrase, canonical_display_keys, n=3, cutoff=0.78)
+        for item in close:
+            if item not in suggestions:
+                suggestions.append(item)
+            if len(suggestions) >= max_suggestions:
+                return suggestions
+
+    return suggestions
+
+
+def extract_symptoms_from_text(text: str) -> Tuple[List[str], str, List[Tuple[str, str]], str]:
+    corrected_text, corrections = auto_correct_text_input(text)
+    cleaned = clean_text_for_match(corrected_text)
+    if not cleaned:
+        return [], "", corrections, corrected_text
 
     detected_model: List[str] = []
     remaining = cleaned
 
     for alias in sorted_aliases:
         display_key = alias_to_display[alias]
-
         if display_key not in display_to_model:
             continue
 
@@ -466,14 +716,14 @@ def extract_symptoms_from_text(text: str) -> Tuple[List[str], str]:
         pattern = r"\b" + re.escape(alias) + r"\b"
 
         if re.search(pattern, remaining):
-            if model_symptom not in detected_model:
-                detected_model.append(model_symptom)
-
-            # 🔴 FIX: remove ONLY one match (not all)
+            add_detected_symptom(model_symptom, detected_model)
             remaining = re.sub(pattern, " ", remaining, count=1)
 
+    partial_token_match_candidates(cleaned, detected_model)
+    fuzzy_phrase_match_candidates(cleaned, detected_model)
+
     remaining = re.sub(r"\s+", " ", remaining).strip()
-    return detected_model, remaining
+    return detected_model, remaining, corrections, corrected_text
 
 # ==============================
 # 10) VECTOR BUILDING
@@ -488,13 +738,12 @@ def build_input_vector(selected_model_symptoms: List[str]) -> np.ndarray:
     return input_vector
 
 # ==============================
-# 11) MODEL PREDICTION (FINAL FIXED)
+# 11) MODEL PREDICTION
 # ==============================
 def predict_rf_core(selected_model_symptoms_tuple: Tuple[str, ...], k: int = 5) -> Union[Dict[str, str], List[Tuple[str, float]]]:
     selected_model_symptoms = list(selected_model_symptoms_tuple)
     input_vector = build_input_vector(selected_model_symptoms)
 
-    # 🔴 empty vector protection (critical)
     if input_vector.sum() == 0:
         return {"error": "No valid symptoms matched the system vocabulary."}
 
@@ -562,7 +811,69 @@ def evaluate_prediction(results: List[Tuple[str, float]], matched_count: int) ->
     }
 
 # ==============================
-# 13) SESSION STATE
+# 13) TOP-3 REASONING + SUGGESTIONS UI HELPERS
+# ==============================
+def get_original_display_from_clean(clean_name: str) -> Optional[str]:
+    return cleaned_to_original_display.get(clean_name)
+
+
+def render_clickable_suggestions(suggestions: List[str], button_prefix: str = "suggest_btn") -> None:
+    if not suggestions:
+        return
+
+    st.markdown('<div class="input-label" style="margin-top:1rem;">Suggested Symptoms</div>', unsafe_allow_html=True)
+
+    cols = st.columns(min(3, max(1, len(suggestions))))
+    for i, suggestion_clean in enumerate(suggestions):
+        pretty = suggestion_clean.replace("_", " ").title()
+        display_value = get_original_display_from_clean(suggestion_clean)
+
+        with cols[i % len(cols)]:
+            if st.button(f"+ {pretty}", key=f"{button_prefix}_{suggestion_clean}_{i}"):
+                if display_value and display_value not in st.session_state["selected_display"]:
+                    st.session_state["selected_display"].append(display_value)
+                st.rerun()
+
+
+def build_top3_reasoning(results: List[Tuple[str, float]], combined_symptoms: List[str]) -> List[Dict[str, str]]:
+    reasoning_cards: List[Dict[str, str]] = []
+    if not results:
+        return reasoning_cards
+
+    symptoms_text = ", ".join(s.replace("_", " ").title() for s in combined_symptoms[:6]) if combined_symptoms else "the recognized symptoms"
+    top_conf = results[0][1]
+
+    for i, (disease, conf) in enumerate(results[:3]):
+        rank = i + 1
+        gap_from_top = top_conf - conf
+
+        if rank == 1:
+            reason = (
+                f"This is the top candidate because it received the highest model probability from the recognized symptom set: "
+                f"{symptoms_text}."
+            )
+        elif gap_from_top < 0.05:
+            reason = (
+                f"This remains a close alternative because its score is near the top prediction, which suggests overlapping "
+                f"symptom patterns in the current input."
+            )
+        else:
+            reason = (
+                f"This is still plausible, but it scored clearly below the top candidate. That usually means only part of the "
+                f"recognized symptom set matches this disease pattern."
+            )
+
+        reasoning_cards.append({
+            "rank": f"#{rank}",
+            "disease": disease,
+            "confidence": f"{conf * 100:.1f}%",
+            "reason": reason
+        })
+
+    return reasoning_cards
+
+# ==============================
+# 14) SESSION STATE
 # ==============================
 if "selected_display" not in st.session_state:
     st.session_state["selected_display"] = []
@@ -576,9 +887,19 @@ if "decision_warning" not in st.session_state:
     st.session_state["decision_warning"] = None
 if "decision_margin" not in st.session_state:
     st.session_state["decision_margin"] = None
+if "leftover_text" not in st.session_state:
+    st.session_state["leftover_text"] = ""
+if "close_suggestions" not in st.session_state:
+    st.session_state["close_suggestions"] = []
+if "typo_corrections" not in st.session_state:
+    st.session_state["typo_corrections"] = []
+if "corrected_text" not in st.session_state:
+    st.session_state["corrected_text"] = ""
+if "top3_reasoning" not in st.session_state:
+    st.session_state["top3_reasoning"] = []
 
 # ==============================
-# 14) UI HEADER
+# 15) UI HEADER
 # ==============================
 st.markdown("""
 <div class="hero">
@@ -588,7 +909,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================
-# 15) MAIN UI (FINAL FIXED)
+# 16) MAIN UI
 # ==============================
 col1, col2 = st.columns([1, 1])
 
@@ -619,81 +940,122 @@ with col1:
         key="free_text"
     )
 
-    detected_model, leftover_text = extract_symptoms_from_text(free_text)
+    detected_model, leftover_text, typo_corrections, corrected_text = extract_symptoms_from_text(free_text)
+    close_suggestions = closest_suggestions_for_unknown(leftover_text) if leftover_text else []
 
     if free_text.strip():
+        if typo_corrections:
+            correction_text = ", ".join(
+                f"{escape(old)} → {escape(new)}" for old, new in typo_corrections[:8]
+            )
+            st.markdown(
+                f'<div class="typo-box">Auto-corrected: <b>{correction_text}</b></div>',
+                unsafe_allow_html=True
+            )
+
         if detected_model:
             st.markdown(
                 f'<div style="margin-top:.5rem"><div class="small-note">Recognized from text</div>{render_symptom_pills(detected_model, prefix_check=True)}</div>',
                 unsafe_allow_html=True
             )
+
         if leftover_text:
+            extra = ""
+            if close_suggestions:
+                pretty_suggestions = ", ".join(escape(s.replace("_", " ").title()) for s in close_suggestions)
+                extra = f"<br><span style='color:#cbd5e1'>Closest matches: {pretty_suggestions}</span>"
+
             st.markdown(
-                f'<div class="unknown-box">Some text was not recognized: <b>{escape(leftover_text)}</b></div>',
+                f'<div class="unknown-box">Some text was not recognized: <b>{escape(leftover_text)}</b>{extra}</div>',
                 unsafe_allow_html=True
             )
 
-    b1, b2 = st.columns([3, 1])
+    if close_suggestions or typo_corrections:
+        combined_suggestions = list(dict.fromkeys(
+            close_suggestions + [
+                clean_text_for_match(new) for _, new in typo_corrections
+            ]
+        ))[:6]
+        render_clickable_suggestions(combined_suggestions, button_prefix="left_suggest")
 
+    b1, b2 = st.columns([3, 1])
     with b1:
         diagnose_clicked = st.button("Diagnose", use_container_width=True)
 
     with b2:
         clear_clicked = st.button("Clear", use_container_width=True)
 
-    # 🔴 FIXED CLEAR BUTTON (SAFE VERSION)
-    if clear_clicked:
-        for key in [
-            "selected_display",
-            "free_text",
-            "results",
-            "used_symptoms",
-            "decision_warning",
-            "decision_margin"
-        ]:
-            if key in st.session_state:
-                del st.session_state[key]
+# logic outside column containers
+if clear_clicked:
+    for key in [
+        "selected_display",
+        "free_text",
+        "results",
+        "used_symptoms",
+        "decision_warning",
+        "decision_margin",
+        "leftover_text",
+        "close_suggestions",
+        "typo_corrections",
+        "corrected_text",
+        "top3_reasoning"
+    ]:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.rerun()
 
-        st.rerun()
+if diagnose_clicked:
+    selected_model = []
+    for s in selected_display:
+        display_key = clean_text_for_match(s)
+        if display_key in display_to_model:
+            selected_model.append(display_to_model[display_key])
 
-    if diagnose_clicked:
-        selected_model = []
-        for s in selected_display:
-            display_key = clean_text_for_match(s)
-            if display_key in display_to_model:
-                selected_model.append(display_to_model[display_key])
+    combined_symptoms = list(dict.fromkeys(selected_model)) + [
+        s for s in detected_model if s not in selected_model
+    ]
 
-        combined_symptoms = list(dict.fromkeys(selected_model)) + [
-            s for s in detected_model if s not in selected_model
-        ]
+    st.session_state["leftover_text"] = leftover_text
+    st.session_state["close_suggestions"] = close_suggestions
+    st.session_state["typo_corrections"] = typo_corrections
+    st.session_state["corrected_text"] = corrected_text
 
-        if not combined_symptoms:
-            st.warning("Please select symptoms or type symptoms that the system can recognize.")
+    if not combined_symptoms:
+        st.warning("Please select symptoms or type symptoms that the system can recognize.")
+        st.session_state["results"] = None
+        st.session_state["used_symptoms"] = []
+        st.session_state["decision_warning"] = None
+        st.session_state["decision_margin"] = None
+        st.session_state["top3_reasoning"] = []
+    else:
+        with st.spinner("Analyzing symptoms..."):
+            prediction_output = predict_rf_core(tuple(combined_symptoms), k=5)
+
+        if isinstance(prediction_output, dict) and "error" in prediction_output:
+            st.error(prediction_output["error"])
+            st.session_state["results"] = None
+            st.session_state["used_symptoms"] = []
+            st.session_state["decision_warning"] = None
+            st.session_state["decision_margin"] = None
+            st.session_state["top3_reasoning"] = []
         else:
-            with st.spinner("Analyzing symptoms..."):
-                prediction_output = predict_rf_core(tuple(combined_symptoms), k=5)
+            decision = evaluate_prediction(prediction_output, len(combined_symptoms))
 
-            if isinstance(prediction_output, dict) and "error" in prediction_output:
-                st.error(prediction_output["error"])
+            if "error" in decision:
+                st.error(decision["error"])
                 st.session_state["results"] = None
                 st.session_state["used_symptoms"] = []
                 st.session_state["decision_warning"] = None
                 st.session_state["decision_margin"] = None
+                st.session_state["top3_reasoning"] = []
             else:
-                decision = evaluate_prediction(prediction_output, len(combined_symptoms))
+                st.session_state["results"] = decision["results"]
+                st.session_state["used_symptoms"] = combined_symptoms
+                st.session_state["decision_warning"] = decision.get("warning")
+                st.session_state["decision_margin"] = decision.get("margin")
+                st.session_state["top3_reasoning"] = build_top3_reasoning(decision["results"], combined_symptoms)
 
-                if "error" in decision:
-                    st.error(decision["error"])
-                    st.session_state["results"] = None
-                    st.session_state["used_symptoms"] = []
-                    st.session_state["decision_warning"] = None
-                    st.session_state["decision_margin"] = None
-                else:
-                    st.session_state["results"] = decision["results"]
-                    st.session_state["used_symptoms"] = combined_symptoms
-                    st.session_state["decision_warning"] = decision.get("warning")
-                    st.session_state["decision_margin"] = decision.get("margin")
-
+with col1:
     if st.session_state.get("results"):
         results = st.session_state["results"]
         combined_symptoms = st.session_state["used_symptoms"]
@@ -745,8 +1107,52 @@ with col1:
         else:
             st.warning("No precautions available.")
 
+with col2:
+    st.markdown('<div class="input-label">How this works</div>', unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="warn-box">
+        Enter symptoms in simple natural language.<br>
+        The app tries auto typo correction, exact matching, synonym matching, token-overlap matching, and close-match recovery before prediction.
+    </div>
+    """, unsafe_allow_html=True)
+
+    if st.session_state.get("corrected_text") and st.session_state.get("free_text"):
+        if clean_text_for_match(st.session_state["corrected_text"]) != clean_text_for_match(st.session_state["free_text"]):
+            st.markdown('<div class="input-label" style="margin-top:1rem;">Corrected Input</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="typo-box"><b>{escape(st.session_state["corrected_text"])}</b></div>',
+                unsafe_allow_html=True
+            )
+
+    if st.session_state.get("leftover_text"):
+        st.markdown('<div class="input-label" style="margin-top:1rem;">Unmatched Text</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="unknown-box"><b>{escape(st.session_state["leftover_text"])}</b></div>',
+            unsafe_allow_html=True
+        )
+
+    if st.session_state.get("close_suggestions"):
+        pretty = [s.replace("_", " ").title() for s in st.session_state["close_suggestions"]]
+        st.markdown('<div class="input-label" style="margin-top:1rem;">Closest Symptom Matches</div>', unsafe_allow_html=True)
+        st.markdown(render_symptom_pills(pretty), unsafe_allow_html=True)
+
+    if st.session_state.get("top3_reasoning"):
+        st.markdown('<div class="input-label" style="margin-top:1rem;">Top-3 Reasoning</div>', unsafe_allow_html=True)
+        for item in st.session_state["top3_reasoning"]:
+            st.markdown(
+                f"""
+                <div class="reason-box">
+                    <b>{escape(item["rank"])} — {escape(item["disease"])}</b><br>
+                    <span style="color:#7dd3fc">{escape(item["confidence"])} confidence</span><br><br>
+                    <span style="color:#cbd5e1">{escape(item["reason"])}</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
 # ==============================
-# 16) FOOTER
+# 17) FOOTER
 # ==============================
 st.markdown(
     '<div class="footer">Educational use only — not medical advice</div>',
