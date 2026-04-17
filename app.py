@@ -303,11 +303,13 @@ MANUAL_ALIASES = {
     "urinating frequently": "polyuria",
     "pee a lot": "polyuria",
     "excessive urination": "polyuria",
+
     # burning urination
     "burning urination": "burning micturition",
     "pain urinating": "burning micturition",
     "painful urination": "burning micturition",
     "burning while urinating": "burning micturition",
+
     # fever
     "fever": "high fever",
     "high fever": "high fever",
@@ -315,6 +317,7 @@ MANUAL_ALIASES = {
     "mild fever": "mild fever",
     "low fever": "mild fever",
     "slight fever": "mild fever",
+
     # sweating / chills
     "sweat": "sweating",
     "sweating": "sweating",
@@ -323,16 +326,19 @@ MANUAL_ALIASES = {
     "chills": "chills",
     "shivering": "chills",
     "shivers": "chills",
+
     # cold hands and feet
     "cold hands": "cold hands and feets",
     "cold feet": "cold hands and feets",
     "cold hands and feet": "cold hands and feets",
+
     # vision and light
     "light sensitivity": "visual disturbances",
     "sensitivity to light": "visual disturbances",
     "blurred vision": "blurred and distorted vision",
     "blurry vision": "blurred and distorted vision",
     "blurred and distorted vision": "blurred and distorted vision",
+
     # throat and nose
     "runny nose": "runny nose",
     "blocked nose": "congestion",
@@ -340,6 +346,7 @@ MANUAL_ALIASES = {
     "sore throat": "throat irritation",
     "throat pain": "throat irritation",
     "throat irritation": "throat irritation",
+
     # pain-related
     "joint pain": "joint pain",
     "joint ache": "joint pain",
@@ -357,22 +364,26 @@ MANUAL_ALIASES = {
     "back pain": "back pain",
     "lower back pain": "back pain",
     "hip pain": "hip joint pain",
+
     # headache and migraine
     "headache": "headache",
     "head ache": "headache",
     "head pain": "headache",
     "migraine": "headache",
+
     # energy
     "fatigue": "fatigue",
     "tiredness": "fatigue",
     "tired": "fatigue",
     "weakness": "fatigue",
     "lack of energy": "fatigue",
+
     # nausea and vomiting
     "nausea": "nausea",
     "queasiness": "nausea",
     "vomiting": "vomiting",
     "throwing up": "vomiting",
+
     # cough and breathing
     "cough": "cough",
     "dry cough": "cough",
@@ -382,9 +393,11 @@ MANUAL_ALIASES = {
     "shortness of breath": "breathlessness",
     "difficulty breathing": "breathlessness",
     "can't breathe": "breathlessness",
+
     # sneezing and congestion
     "sneezing": "continuous sneezing",
     "continuous sneezing": "continuous sneezing",
+
     # dizziness and lightheadedness
     "dizziness": "dizziness",
     "dizzy": "dizziness",
@@ -445,15 +458,19 @@ def extract_symptoms_from_text(text):
 
     return detected, remaining
 
-
-
 # ================== PREDICTION ==================
 def predict_topk_rf(selected_symptoms, k=5):
     input_dict = {col: 0 for col in feature_columns}
 
+    matched_count = 0
+
     for symptom in selected_symptoms:
         clean_symptom = normalize_symptom_text(symptom)
         matching_columns = symptom_to_columns.get(clean_symptom, [])
+
+        if matching_columns:
+            matched_count += 1
+
         for col in matching_columns:
             input_dict[col] = 1
 
@@ -467,6 +484,20 @@ def predict_topk_rf(selected_symptoms, k=5):
         disease_name = le.inverse_transform([idx])[0]
         confidence = float(probabilities[idx])
         results.append((disease_name, confidence))
+
+    top_conf = results[0][1]
+
+    if matched_count <= 1:
+        return {
+            "warning": "Too few valid symptoms detected. Please provide more specific symptoms.",
+            "results": results
+        }
+
+    if top_conf < 0.30:
+        return {
+            "warning": "Symptoms do not clearly match a specific disease. Please refine input.",
+            "results": results
+        }
 
     return results
 
@@ -532,7 +563,13 @@ with col1:
             st.warning("Please select symptoms or type symptoms that the system can recognize.")
         else:
             with st.spinner("Analyzing symptoms..."):
-                results = predict_topk_rf(combined_symptoms, k=5)
+                output = predict_topk_rf(combined_symptoms, k=5)
+
+            if isinstance(output, dict) and "warning" in output:
+                st.warning(output["warning"])
+                results = output["results"]
+            else:
+                results = output
 
             st.session_state["results"] = results
             st.session_state["used_symptoms"] = combined_symptoms
