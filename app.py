@@ -215,7 +215,7 @@ def extract_clean_symptom(feature_name):
 def confidence_message(top_conf, second_conf):
     gap = top_conf - second_conf
 
-    if top_conf >= 0.60:
+    if top_conf >= 0.50:
         return "good", "Strong confidence prediction."
     if top_conf >= 0.35 and gap >= 0.10:
         return "good", "Reasonable confidence prediction."
@@ -433,13 +433,13 @@ def extract_symptoms_from_text(text):
     for alias in sorted_aliases:
         pattern = r"\b" + re.escape(alias) + r"\b"
 
-        if re.search(pattern, remaining):
+        if re.search(pattern, remaining) or alias in remaining:
             canonical = alias_map[alias]
 
             if canonical not in detected:
                 detected.append(canonical)
 
-            remaining = re.sub(pattern, " ", remaining)
+            remaining = re.sub(pattern, " ", remaining, count=1)
 
     remaining = re.sub(r"\s+", " ", remaining).strip()
 
