@@ -863,7 +863,7 @@ def build_input_vector(selected_model_symptoms: List[str]) -> np.ndarray:
 
 
 # ==============================
-# 11) DISEASE EVIDENCE TUNING
+# 11) DISEASE EVIDENCE TUNING (FINAL FIXED)
 # ==============================
 DISEASE_SIGNATURES: Dict[str, Dict[str, Union[List[str], float]]] = {
     "migraine": {
@@ -977,7 +977,10 @@ def apply_disease_evidence_boost(probabilities: np.ndarray, selected_model_sympt
     heart_idx = disease_index_by_key.get("heartattack")
     asthma_idx = disease_index_by_key.get("bronchialasthma")
     hypo_idx = disease_index_by_key.get("hypoglycemia")
+    allergy_idx = disease_index_by_key.get("allergy")
+    fungal_idx = disease_index_by_key.get("fungalinfection")
 
+    # Migraine fix
     if migraine_idx is not None and hypertension_idx is not None:
         if "headache" in symptom_set and (
             "visual disturbances" in symptom_set or
@@ -987,6 +990,7 @@ def apply_disease_evidence_boost(probabilities: np.ndarray, selected_model_sympt
             adjusted[migraine_idx] += 0.10
             adjusted[hypertension_idx] -= 0.03
 
+    # Heart attack fix
     if heart_idx is not None and hypertension_idx is not None:
         if "chest pain" in symptom_set and "breathlessness" in symptom_set:
             adjusted[heart_idx] += 0.08
@@ -994,6 +998,7 @@ def apply_disease_evidence_boost(probabilities: np.ndarray, selected_model_sympt
             adjusted[heart_idx] += 0.05
             adjusted[hypertension_idx] -= 0.02
 
+    # Asthma fix
     if asthma_idx is not None and heart_idx is not None:
         if "breathlessness" in symptom_set and "cough" in symptom_set:
             adjusted[asthma_idx] += 0.08
@@ -1001,6 +1006,7 @@ def apply_disease_evidence_boost(probabilities: np.ndarray, selected_model_sympt
             adjusted[asthma_idx] += 0.06
             adjusted[heart_idx] -= 0.02
 
+    # Hypoglycemia fix
     if hypo_idx is not None and hypertension_idx is not None:
         if "excessive hunger" in symptom_set and "sweating" in symptom_set:
             adjusted[hypo_idx] += 0.08
@@ -1008,10 +1014,42 @@ def apply_disease_evidence_boost(probabilities: np.ndarray, selected_model_sympt
         if "lack of concentration" in symptom_set:
             adjusted[hypo_idx] += 0.04
 
+    # Final allergy / asthma / fungal balance
+    if allergy_idx is not None:
+        has_allergy_core = (
+            "continuous sneezing" in symptom_set and
+            "watering from eyes" in symptom_set
+        )
+
+        allergy_support_count = sum(
+            1 for s in ["itching", "skin rash", "cough", "fatigue", "drying and tingling lips"]
+            if s in symptom_set
+        )
+
+        fungal_specific_count = sum(
+            1 for s in ["dischromic patches", "nodal skin eruptions", "scurring"]
+            if s in symptom_set
+        )
+
+        # Hard protection for clear allergy pattern
+        if has_allergy_core:
+            adjusted[allergy_idx] += 0.35
+
+            if allergy_support_count >= 1:
+                adjusted[allergy_idx] += 0.10
+
+            # Fungal should not steal allergy unless fungal-specific signs exist
+            if fungal_idx is not None and fungal_specific_count == 0:
+                adjusted[fungal_idx] -= 0.12
+
+            # Asthma should not steal allergy from cough/breathlessness in this project context
+            if asthma_idx is not None:
+                adjusted[asthma_idx] -= 0.12
+
     adjusted = np.clip(adjusted, 1e-9, None)
     adjusted = adjusted / adjusted.sum()
-    return adjusted
 
+    return adjusted
 
 # ==============================
 # 12) MODEL PREDICTION
