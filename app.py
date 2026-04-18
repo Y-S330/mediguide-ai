@@ -190,6 +190,14 @@ st.markdown("""
     font-size: 0.85rem;
 }
 
+.summary-box {
+    background: rgba(34, 197, 94, .08);
+    border: 1px solid rgba(34, 197, 94, .20);
+    border-radius: 14px;
+    padding: 12px;
+    margin: 0.8rem 0;
+}
+
 .footer {
     text-align: center;
     color: #64748b;
@@ -236,16 +244,30 @@ def normalize_disease_key(disease_name: str) -> str:
     )
 
 
-def confidence_message(top_conf: float, second_conf: float) -> Tuple[str, str]:
+def confidence_message(top_conf: float, second_conf: float, matched_count: int) -> Tuple[str, str]:
     gap = top_conf - second_conf
 
+    if matched_count < 2:
+        return "low", "Too few symptoms detected. Add 1–2 more relevant symptoms for a better result."
     if top_conf >= 0.50:
         return "good", "Strong confidence prediction."
     if top_conf >= 0.35 and gap >= 0.08:
         return "good", "Reasonable confidence prediction."
     if top_conf >= 0.20:
-        return "medium", "Moderate confidence. Adding more symptoms may improve the result."
-    return "low", "Low confidence. Add more relevant symptoms for a better prediction."
+        return "medium", "Moderate confidence. Symptoms may overlap, so adding more details may improve the result."
+    return "low", "Low confidence. Symptoms may be too general or overlapping."
+
+
+def render_prediction_summary(top_disease: str) -> None:
+    st.markdown(
+        f"""
+        <div class="summary-box">
+            <b>Most likely condition:</b> {escape(top_disease)}<br>
+            Based on the provided symptoms, this is the highest probability prediction from the model.
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
 def render_symptom_pills(symptoms: List[str], prefix_check: bool = False) -> str:
@@ -271,6 +293,16 @@ def build_ngrams(tokens: List[str], min_n: int = 1, max_n: int = 4) -> List[str]
         for i in range(len(tokens) - n + 1):
             phrases.append(" ".join(tokens[i:i + n]))
     return phrases
+
+
+def render_pre_diagnosis_hint(symptoms: List[str]) -> None:
+    if not symptoms:
+        return
+    if len(symptoms) == 1:
+        st.info("Add at least 2–3 symptoms for a more reliable prediction.")
+    elif len(symptoms) > 8:
+        st.warning("Too many symptoms may reduce accuracy if they belong to different illnesses.")
+
 
 # ==============================
 # 4) FILE DISCOVERY
@@ -772,7 +804,7 @@ def predict_rf_core(selected_model_symptoms_tuple: Tuple[str, ...], k: int = 5) 
 # ==============================
 # 12) DECISION LAYER
 # ==============================
-def evaluate_prediction(results: List[Tuple[str, float]], matched_count: int) -> Dict[str, Union[str, float, List[Tuple[str, float]]]]:
+def evaluate_prediction(results: List[Tuple[str, float]], matched_count: int):
     if not results:
         return {"error": "Prediction failed."}
 
@@ -780,34 +812,18 @@ def evaluate_prediction(results: List[Tuple[str, float]], matched_count: int) ->
     second_conf = results[1][1] if len(results) > 1 else 0.0
     margin = top_conf - second_conf
 
-    if matched_count < 2:
-        return {
-            "warning": "Too few valid symptoms detected. Please provide more specific symptoms.",
-            "results": results,
-            "confidence": top_conf,
-            "margin": margin
-        }
-
-    if top_conf < 0.35:
-        return {
-            "warning": "Low confidence prediction. Try adding clearer symptoms.",
-            "results": results,
-            "confidence": top_conf,
-            "margin": margin
-        }
-
-    if margin < 0.08:
-        return {
-            "warning": "Symptoms overlap across diseases. Add more details.",
-            "results": results,
-            "confidence": top_conf,
-            "margin": margin
-        }
+    flags = {
+        "too_few_symptoms": matched_count < 2,
+        "low_confidence": top_conf < 0.30,
+        "uncertain": margin < 0.08
+    }
 
     return {
         "results": results,
         "confidence": top_conf,
-        "margin": margin
+        "margin": margin,
+        "flags": flags,
+        "reliable": not any(flags.values())
     }
 
 # ==============================
@@ -817,30 +833,86 @@ def get_original_display_from_clean(clean_name: str) -> Optional[str]:
     return cleaned_to_original_display.get(clean_name)
 
 
+def convert_display_selection_to_model(selected_display_values: List[str]) -> List[str]:
+    selected_model: List[str] = []
+    for s in selected_display_values:
+        display_key = clean_text_for_match(s)
+        if display_key in display_to_model:
+            selected_model.append(display_to_model[display_key])
+    return list(dict.fromkeys(selected_model))
+
+
+def merge_symptom_sources(selected_display_values: List[str], detected_model_values: List[str]) -> List[str]:
+    selected_model = convert_display_selection_to_model(selected_display_values)
+    combined = list(dict.fromkeys(selected_model + detected_model_values))
+    return combined
+
+
+def queue_suggestion_addition(suggestion_clean: str) -> None:
+    display_value = get_original_display_from_clean(suggestion_clean)
+    if not display_value:
+        return
+
+    pending = st.session_state.get("pending_selected_display_additions", [])
+
+    if display_value not in pending:
+        pending.append(display_value)
+
+    st.session_state["pending_selected_display_additions"] = pending
+    st.session_state["last_added_symptom"] = display_value
+    st.session_state["show_added_message"] = True
+
+
+def apply_pending_selected_display_additions() -> None:
+    pending = st.session_state.get("pending_selected_display_additions", [])
+
+    if not pending:
+        return
+
+    current = st.session_state.get("selected_display", [])
+    updated = list(current)
+
+    for item in pending:
+        if item not in updated:
+            updated.append(item)
+
+    st.session_state["selected_display"] = updated
+    st.session_state["pending_selected_display_additions"] = []
+
+
 def render_clickable_suggestions(suggestions: List[str], button_prefix: str = "suggest_btn") -> None:
     if not suggestions:
         return
 
-    st.markdown('<div class="input-label" style="margin-top:1rem;">Suggested Symptoms</div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class="input-label" style="margin-top:1rem;">Suggested Symptoms</div>
+        <div class="small-note">Clicking a suggestion will add it to the selected symptoms list above.</div>
+        """,
+        unsafe_allow_html=True
+    )
 
     cols = st.columns(min(3, max(1, len(suggestions))))
+
     for i, suggestion_clean in enumerate(suggestions):
         pretty = suggestion_clean.replace("_", " ").title()
-        display_value = get_original_display_from_clean(suggestion_clean)
 
         with cols[i % len(cols)]:
             if st.button(f"+ {pretty}", key=f"{button_prefix}_{suggestion_clean}_{i}"):
-                if display_value and display_value not in st.session_state["selected_display"]:
-                    st.session_state["selected_display"].append(display_value)
+                queue_suggestion_addition(suggestion_clean)
                 st.rerun()
 
 
 def build_top3_reasoning(results: List[Tuple[str, float]], combined_symptoms: List[str]) -> List[Dict[str, str]]:
     reasoning_cards: List[Dict[str, str]] = []
+
     if not results:
         return reasoning_cards
 
-    symptoms_text = ", ".join(s.replace("_", " ").title() for s in combined_symptoms[:6]) if combined_symptoms else "the recognized symptoms"
+    symptoms_text = ", ".join(
+        s.replace("_", " ").title() for s in combined_symptoms[:6]
+    ) if combined_symptoms else "the recognized symptoms"
+
     top_conf = results[0][1]
 
     for i, (disease, conf) in enumerate(results[:3]):
@@ -849,18 +921,18 @@ def build_top3_reasoning(results: List[Tuple[str, float]], combined_symptoms: Li
 
         if rank == 1:
             reason = (
-                f"This is the top candidate because it received the highest model probability from the recognized symptom set: "
-                f"{symptoms_text}."
+                f"This is the top candidate because it received the highest model probability "
+                f"from the recognized symptom set: {symptoms_text}."
             )
         elif gap_from_top < 0.05:
             reason = (
-                f"This remains a close alternative because its score is near the top prediction, which suggests overlapping "
-                f"symptom patterns in the current input."
+                f"This remains a close alternative because its score is near the top prediction, "
+                f"which suggests overlapping symptom patterns in the current input."
             )
         else:
             reason = (
-                f"This is still plausible, but it scored clearly below the top candidate. That usually means only part of the "
-                f"recognized symptom set matches this disease pattern."
+                f"This is still plausible, but it scored clearly below the top candidate. "
+                f"That usually means only part of the recognized symptom set matches this disease pattern."
             )
 
         reasoning_cards.append({
@@ -877,16 +949,18 @@ def build_top3_reasoning(results: List[Tuple[str, float]], combined_symptoms: Li
 # ==============================
 if "selected_display" not in st.session_state:
     st.session_state["selected_display"] = []
+if "pending_selected_display_additions" not in st.session_state:
+    st.session_state["pending_selected_display_additions"] = []
 if "free_text" not in st.session_state:
     st.session_state["free_text"] = ""
 if "results" not in st.session_state:
     st.session_state["results"] = None
 if "used_symptoms" not in st.session_state:
     st.session_state["used_symptoms"] = []
-if "decision_warning" not in st.session_state:
-    st.session_state["decision_warning"] = None
 if "decision_margin" not in st.session_state:
     st.session_state["decision_margin"] = None
+if "decision_flags" not in st.session_state:
+    st.session_state["decision_flags"] = {}
 if "leftover_text" not in st.session_state:
     st.session_state["leftover_text"] = ""
 if "close_suggestions" not in st.session_state:
@@ -897,6 +971,12 @@ if "corrected_text" not in st.session_state:
     st.session_state["corrected_text"] = ""
 if "top3_reasoning" not in st.session_state:
     st.session_state["top3_reasoning"] = []
+if "preview_combined_symptoms" not in st.session_state:
+    st.session_state["preview_combined_symptoms"] = []
+if "last_added_symptom" not in st.session_state:
+    st.session_state["last_added_symptom"] = None
+if "show_added_message" not in st.session_state:
+    st.session_state["show_added_message"] = False
 
 # ==============================
 # 15) UI HEADER
@@ -911,6 +991,8 @@ st.markdown("""
 # ==============================
 # 16) MAIN UI
 # ==============================
+apply_pending_selected_display_additions()
+
 col1, col2 = st.columns([1, 1])
 
 with col1:
@@ -922,6 +1004,11 @@ with col1:
         Try to enter symptoms from the same illness for better results.
     </div>
     """, unsafe_allow_html=True)
+
+    if st.session_state.get("show_added_message") and st.session_state.get("last_added_symptom"):
+        added_label = st.session_state["last_added_symptom"].replace("_", " ").title()
+        st.success(f"{added_label} added to selected symptoms")
+        st.session_state["show_added_message"] = False
 
     selected_display = st.multiselect(
         "Symptoms",
@@ -943,32 +1030,56 @@ with col1:
     detected_model, leftover_text, typo_corrections, corrected_text = extract_symptoms_from_text(free_text)
     close_suggestions = closest_suggestions_for_unknown(leftover_text) if leftover_text else []
 
-    if free_text.strip():
-        if typo_corrections:
-            correction_text = ", ".join(
-                f"{escape(old)} → {escape(new)}" for old, new in typo_corrections[:8]
-            )
-            st.markdown(
-                f'<div class="typo-box">Auto-corrected: <b>{correction_text}</b></div>',
-                unsafe_allow_html=True
-            )
+    selected_model_preview = convert_display_selection_to_model(selected_display)
+    combined_preview_symptoms = merge_symptom_sources(selected_display, detected_model)
+    st.session_state["preview_combined_symptoms"] = combined_preview_symptoms
 
+    if free_text.strip() and typo_corrections:
+        correction_text = ", ".join(
+            f"{escape(old)} → {escape(new)}" for old, new in typo_corrections[:8]
+        )
+        st.markdown(
+            f'<div class="typo-box">Auto-corrected: <b>{correction_text}</b></div>',
+            unsafe_allow_html=True
+        )
+
+    if combined_preview_symptoms:
+        st.markdown(
+            f'''
+            <div style="margin-top:.65rem">
+                <div class="small-note">Recognized symptoms that will be used for diagnosis</div>
+                {render_symptom_pills(combined_preview_symptoms, prefix_check=True)}
+            </div>
+            ''',
+            unsafe_allow_html=True
+        )
+
+        source_notes = []
+        if selected_model_preview:
+            source_notes.append(f"{len(selected_model_preview)} from dropdown")
         if detected_model:
+            source_notes.append(f"{len(detected_model)} from text")
+
+        if source_notes:
             st.markdown(
-                f'<div style="margin-top:.5rem"><div class="small-note">Recognized from text</div>{render_symptom_pills(detected_model, prefix_check=True)}</div>',
+                f'<div class="small-note" style="margin-top:.35rem">Source: {" + ".join(source_notes)}</div>',
                 unsafe_allow_html=True
             )
 
-        if leftover_text:
-            extra = ""
-            if close_suggestions:
-                pretty_suggestions = ", ".join(escape(s.replace("_", " ").title()) for s in close_suggestions)
-                extra = f"<br><span style='color:#cbd5e1'>Closest matches: {pretty_suggestions}</span>"
+    render_pre_diagnosis_hint(combined_preview_symptoms)
 
-            st.markdown(
-                f'<div class="unknown-box">Some text was not recognized: <b>{escape(leftover_text)}</b>{extra}</div>',
-                unsafe_allow_html=True
+    if free_text.strip() and leftover_text:
+        extra = ""
+        if close_suggestions:
+            pretty_suggestions = ", ".join(
+                escape(s.replace("_", " ").title()) for s in close_suggestions
             )
+            extra = f"<br><span style='color:#cbd5e1'>Closest matches: {pretty_suggestions}</span>"
+
+        st.markdown(
+            f'<div class="unknown-box">Some text was not recognized: <b>{escape(leftover_text)}</b>{extra}</div>',
+            unsafe_allow_html=True
+        )
 
     if close_suggestions or typo_corrections:
         combined_suggestions = list(dict.fromkeys(
@@ -985,47 +1096,43 @@ with col1:
     with b2:
         clear_clicked = st.button("Clear", use_container_width=True)
 
-# logic outside column containers
 if clear_clicked:
     for key in [
         "selected_display",
+        "pending_selected_display_additions",
         "free_text",
         "results",
         "used_symptoms",
-        "decision_warning",
         "decision_margin",
+        "decision_flags",
         "leftover_text",
         "close_suggestions",
         "typo_corrections",
         "corrected_text",
-        "top3_reasoning"
+        "top3_reasoning",
+        "preview_combined_symptoms",
+        "last_added_symptom",
+        "show_added_message"
     ]:
         if key in st.session_state:
             del st.session_state[key]
     st.rerun()
 
 if diagnose_clicked:
-    selected_model = []
-    for s in selected_display:
-        display_key = clean_text_for_match(s)
-        if display_key in display_to_model:
-            selected_model.append(display_to_model[display_key])
-
-    combined_symptoms = list(dict.fromkeys(selected_model)) + [
-        s for s in detected_model if s not in selected_model
-    ]
+    combined_symptoms = merge_symptom_sources(selected_display, detected_model)
 
     st.session_state["leftover_text"] = leftover_text
     st.session_state["close_suggestions"] = close_suggestions
     st.session_state["typo_corrections"] = typo_corrections
     st.session_state["corrected_text"] = corrected_text
+    st.session_state["preview_combined_symptoms"] = combined_symptoms
 
     if not combined_symptoms:
         st.warning("Please select symptoms or type symptoms that the system can recognize.")
         st.session_state["results"] = None
         st.session_state["used_symptoms"] = []
-        st.session_state["decision_warning"] = None
         st.session_state["decision_margin"] = None
+        st.session_state["decision_flags"] = {}
         st.session_state["top3_reasoning"] = []
     else:
         with st.spinner("Analyzing symptoms..."):
@@ -1035,8 +1142,8 @@ if diagnose_clicked:
             st.error(prediction_output["error"])
             st.session_state["results"] = None
             st.session_state["used_symptoms"] = []
-            st.session_state["decision_warning"] = None
             st.session_state["decision_margin"] = None
+            st.session_state["decision_flags"] = {}
             st.session_state["top3_reasoning"] = []
         else:
             decision = evaluate_prediction(prediction_output, len(combined_symptoms))
@@ -1045,25 +1152,27 @@ if diagnose_clicked:
                 st.error(decision["error"])
                 st.session_state["results"] = None
                 st.session_state["used_symptoms"] = []
-                st.session_state["decision_warning"] = None
                 st.session_state["decision_margin"] = None
+                st.session_state["decision_flags"] = {}
                 st.session_state["top3_reasoning"] = []
             else:
-                st.session_state["results"] = decision["results"]
+                st.session_state["results"] = decision.get("results")
                 st.session_state["used_symptoms"] = combined_symptoms
-                st.session_state["decision_warning"] = decision.get("warning")
                 st.session_state["decision_margin"] = decision.get("margin")
-                st.session_state["top3_reasoning"] = build_top3_reasoning(decision["results"], combined_symptoms)
+                st.session_state["decision_flags"] = decision.get("flags", {})
+                st.session_state["top3_reasoning"] = build_top3_reasoning(
+                    decision.get("results") or [],
+                    combined_symptoms
+                )
 
 with col1:
     if st.session_state.get("results"):
         results = st.session_state["results"]
         combined_symptoms = st.session_state["used_symptoms"]
-        decision_warning = st.session_state.get("decision_warning")
 
         top_disease, top_conf = results[0]
         second_conf = results[1][1] if len(results) > 1 else 0.0
-        level, msg = confidence_message(top_conf, second_conf)
+        level, msg = confidence_message(top_conf, second_conf, len(combined_symptoms))
 
         st.markdown(f"""
         <div class="result-card top">
@@ -1075,8 +1184,7 @@ with col1:
         </div>
         """, unsafe_allow_html=True)
 
-        if decision_warning:
-            st.warning(decision_warning)
+        render_prediction_summary(top_disease)
 
         if level == "good":
             st.markdown(f'<div class="good-conf">{escape(msg)}</div>', unsafe_allow_html=True)
@@ -1085,10 +1193,8 @@ with col1:
         else:
             st.markdown(f'<div class="low-conf">{escape(msg)}</div>', unsafe_allow_html=True)
 
-        if len(combined_symptoms) < 2:
-            st.warning("Only one symptom was recognized. Results may be weak.")
-        elif len(combined_symptoms) > 8:
-            st.warning("Many symptoms were entered. If they belong to multiple illnesses, accuracy may decrease.")
+        if len(combined_symptoms) > 8:
+            st.warning("Too many mixed symptoms may reduce accuracy.")
 
         disease_key = normalize_disease_key(top_disease)
 
@@ -1150,7 +1256,6 @@ with col2:
                 """,
                 unsafe_allow_html=True
             )
-
 # ==============================
 # 17) FOOTER
 # ==============================
