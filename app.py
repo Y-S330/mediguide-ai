@@ -8,6 +8,7 @@ import joblib
 import numpy as np
 import pandas as pd
 import streamlit as st
+from deep_translator import GoogleTranslator
 
 # ==============================
 # 1) PAGE SETUP
@@ -212,13 +213,219 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 # ==============================
 # 3) CORE HELPERS
 # ==============================
+UI_TEXT = {
+    "en": {
+        "language": "Language",
+        "app_title": "🩺 MediGuide AI",
+        "app_subtitle": "AI-powered disease prediction using structured symptoms",
+        "symptom_input_title": "Select or Describe Your Symptoms",
+        "warn_box": "⚠️ You can use the dropdown, type symptoms naturally, or use both.<br>Try to enter symptoms from the same illness for better results.",
+        "added_success": "{symptom} added to selected symptoms",
+        "symptoms_label": "Symptoms",
+        "symptoms_placeholder": "Choose symptoms from the list...",
+        "symptoms_help": "Start typing to search and select symptoms from the list",
+        "free_text_label": "Or type symptoms naturally",
+        "free_text_placeholder": "e.g. high fever, headache, blurred vision, frequent urination",
+        "auto_corrected": "Auto-corrected",
+        "translated_input": "Translated Input",
+        "recognized_for_diagnosis": "Recognized symptoms that will be used for diagnosis",
+        "source_prefix": "Source",
+        "from_dropdown": "{count} from dropdown",
+        "from_text": "{count} from text",
+        "unrecognized_text": "Some text was not recognized",
+        "closest_matches": "Closest matches",
+        "suggested_symptoms": "Suggested Symptoms",
+        "suggested_symptoms_note": "Clicking a suggestion will add it to the selected symptoms list above.",
+        "diagnose": "Diagnose",
+        "clear": "Clear",
+        "analyzing": "Analyzing symptoms...",
+        "select_warning": "Please select symptoms or type symptoms that the system can recognize.",
+        "how_it_works": "How this works",
+        "how_it_works_text": "Enter symptoms in simple natural language.<br>The app uses typo correction, exact matching, dataset-aligned synonym matching, token-overlap matching, close-match recovery, and a disease-evidence layer before final ranking.",
+        "corrected_input": "Corrected Input",
+        "unmatched_text": "Unmatched Text",
+        "closest_symptom_matches": "Closest Symptom Matches",
+        "top3_reasoning": "Top-3 Reasoning",
+        "recognized_symptoms_used": "Recognized Symptoms Used",
+        "description": "Description",
+        "precautions": "Precautions",
+        "no_description": "No description available.",
+        "no_precautions": "No precautions available.",
+        "footer": "Educational use only — not medical advice",
+        "most_likely_condition": "Most likely condition",
+        "most_likely_text": "Based on the provided symptoms, this is the highest probability prediction from the model.",
+        "too_many_mixed": "Too many mixed symptoms may reduce accuracy.",
+        "too_few_hint": "Add at least 2–3 symptoms for a more reliable prediction.",
+        "too_many_hint": "Too many symptoms may reduce accuracy if they belong to different illnesses.",
+        "confidence_strong": "Strong confidence prediction.",
+        "confidence_reasonable": "Reasonable confidence prediction.",
+        "confidence_moderate": "Moderate confidence. Symptoms may overlap, so adding more details may improve the result.",
+        "confidence_low": "Low confidence. Symptoms may be too general or overlapping.",
+        "few_symptoms_conf": "Too few symptoms detected. Add 1–2 more relevant symptoms for a better result.",
+        "missing_required_files": "Missing required files:",
+        "confidence_word": "confidence",
+    },
+    "ar": {
+        "language": "اللغة",
+        "app_title": "🩺 MediGuide AI",
+        "app_subtitle": "نظام ذكي لتوقع المرض اعتمادًا على الأعراض",
+        "symptom_input_title": "اختر الأعراض أو اكتبها",
+        "warn_box": "⚠️ يمكنك استخدام القائمة أو كتابة الأعراض بشكل طبيعي أو استخدام الاثنين معًا.<br>حاول إدخال أعراض من نفس المرض للحصول على نتيجة أفضل.",
+        "added_success": "تمت إضافة {symptom} إلى الأعراض المختارة",
+        "symptoms_label": "الأعراض",
+        "symptoms_placeholder": "اختر الأعراض من القائمة...",
+        "symptoms_help": "ابدأ بالكتابة للبحث عن الأعراض واختيارها من القائمة",
+        "free_text_label": "أو اكتب الأعراض بشكل طبيعي",
+        "free_text_placeholder": "مثال: حرارة مرتفعة، صداع، زغللة، كثرة التبول",
+        "auto_corrected": "تم التصحيح التلقائي",
+        "translated_input": "النص بعد الترجمة",
+        "recognized_for_diagnosis": "الأعراض التي تم التعرف عليها وسيتم استخدامها في التشخيص",
+        "source_prefix": "المصدر",
+        "from_dropdown": "{count} من القائمة",
+        "from_text": "{count} من النص",
+        "unrecognized_text": "بعض النص لم يتم التعرف عليه",
+        "closest_matches": "أقرب التطابقات",
+        "suggested_symptoms": "أعراض مقترحة",
+        "suggested_symptoms_note": "الضغط على أي اقتراح سيضيفه إلى قائمة الأعراض المختارة بالأعلى.",
+        "diagnose": "تشخيص",
+        "clear": "مسح",
+        "analyzing": "جاري تحليل الأعراض...",
+        "select_warning": "من فضلك اختر أعراضًا أو اكتب أعراضًا يمكن للنظام التعرف عليها.",
+        "how_it_works": "كيف يعمل النظام",
+        "how_it_works_text": "اكتب الأعراض بلغة طبيعية بسيطة.<br>يستخدم التطبيق تصحيح الأخطاء الإملائية، والمطابقة المباشرة، ومطابقة المرادفات المتوافقة مع الداتا، ومطابقة تداخل الكلمات، واسترجاع أقرب تطابق، وطبقة تعزيز للأدلة المرضية قبل الترتيب النهائي.",
+        "corrected_input": "النص بعد التصحيح",
+        "unmatched_text": "نص غير مطابق",
+        "closest_symptom_matches": "أقرب الأعراض المطابقة",
+        "top3_reasoning": "شرح أفضل 3 نتائج",
+        "recognized_symptoms_used": "الأعراض المستخدمة",
+        "description": "الوصف",
+        "precautions": "الاحتياطات",
+        "no_description": "لا يوجد وصف متاح.",
+        "no_precautions": "لا توجد احتياطات متاحة.",
+        "footer": "للاستخدام التعليمي فقط — وليس نصيحة طبية",
+        "most_likely_condition": "أكثر حالة متوقعة",
+        "most_likely_text": "بناءً على الأعراض المدخلة، هذه هي النتيجة الأعلى احتمالًا من النموذج.",
+        "too_many_mixed": "وجود أعراض كثيرة ومختلطة قد يقلل الدقة.",
+        "too_few_hint": "أضف 2–3 أعراض على الأقل للحصول على نتيجة أكثر موثوقية.",
+        "too_many_hint": "عدد الأعراض الكبير قد يقلل الدقة إذا كانت الأعراض تنتمي لأمراض مختلفة.",
+        "confidence_strong": "درجة الثقة عالية.",
+        "confidence_reasonable": "درجة الثقة جيدة.",
+        "confidence_moderate": "درجة الثقة متوسطة. قد يكون هناك تداخل بين الأعراض، لذلك إضافة تفاصيل أكثر قد تحسن النتيجة.",
+        "confidence_low": "درجة الثقة منخفضة. قد تكون الأعراض عامة جدًا أو متداخلة.",
+        "few_symptoms_conf": "تم التعرف على أعراض قليلة جدًا. أضف 1–2 أعراض أخرى مناسبة للحصول على نتيجة أفضل.",
+        "missing_required_files": "الملفات المطلوبة غير موجودة:",
+        "confidence_word": "ثقة",
+    }
+}
+
+SYMPTOM_ARABIC_MAP = {
+    "headache": "صداع",
+    "visual disturbances": "اضطرابات بصرية",
+    "blurred and distorted vision": "زغللة وتشوش الرؤية",
+    "breathlessness": "ضيق في التنفس",
+    "chest pain": "ألم في الصدر",
+    "continuous sneezing": "عطس مستمر",
+    "watering from eyes": "دموع من العين",
+    "diarrhoea": "إسهال",
+    "vomiting": "قيء",
+    "nausea": "غثيان",
+    "dehydration": "جفاف",
+    "indigestion": "عسر هضم",
+    "continuous feel of urine": "إحساس مستمر بالرغبة في التبول",
+    "burning micturition": "حرقان أثناء التبول",
+    "bladder discomfort": "ألم أو عدم ارتياح بالمثانة",
+    "foul smell of urine": "رائحة بول كريهة",
+    "pus filled pimples": "حبوب مليئة بالصديد",
+    "blackheads": "رؤوس سوداء",
+    "skin rash": "طفح جلدي",
+    "itching": "حكة",
+    "dischromic patches": "بقع جلدية متغيرة اللون",
+    "scurring": "ندبات جلدية",
+    "shivering": "ارتعاش",
+    "chills": "قشعريرة",
+    "fatigue": "إرهاق",
+    "excessive hunger": "جوع شديد",
+    "dizziness": "دوخة",
+    "lack of concentration": "قلة تركيز",
+    "anxiety": "قلق",
+    "irritability": "عصبية",
+    "sweating": "تعرق",
+    "palpitations": "خفقان",
+    "cough": "سعال",
+    "mucoid sputum": "بلغم مخاطي",
+    "stiff neck": "تيبس الرقبة",
+    "loss of balance": "فقدان التوازن",
+    "sunken eyes": "عينان غائرتان",
+    "drying and tingling lips": "جفاف وتنميل الشفاه",
+    "slurred speech": "تلعثم في الكلام",
+    "family history": "تاريخ عائلي",
+    "depression": "اكتئاب",
+    "nodal skin eruptions": "نتوءات جلدية",
+}
+
+DISEASE_ARABIC_MAP = {
+    "acne": "حب الشباب",
+    "allergy": "حساسية",
+    "bronchial asthma": "ربو شعبي",
+    "fungal infection": "عدوى فطرية",
+    "gastroenteritis": "التهاب المعدة والأمعاء",
+    "heart attack": "أزمة قلبية",
+    "hypertension": "ارتفاع ضغط الدم",
+    "hypoglycemia": "انخفاض سكر الدم",
+    "migraine": "صداع نصفي",
+    "urinary tract infection": "التهاب المسالك البولية",
+}
+
+if "ui_lang" not in st.session_state:
+    st.session_state["ui_lang"] = "en"
+
+def get_lang() -> str:
+    return st.session_state.get("ui_lang", "en")
+
+def tr(key: str, **kwargs) -> str:
+    lang = get_lang()
+    text = UI_TEXT.get(lang, UI_TEXT["en"]).get(key, key)
+    if kwargs:
+        try:
+            return text.format(**kwargs)
+        except Exception:
+            return text
+    return text
+
+@st.cache_data(show_spinner=False)
+def translate_text_cached(text: str, target_lang: str) -> str:
+    text = str(text).strip()
+    if not text:
+        return text
+    try:
+        return GoogleTranslator(source="auto", target=target_lang).translate(text)
+    except Exception:
+        return text
+
+def has_arabic(text: str) -> bool:
+    return bool(re.search(r"[\u0600-\u06FF]", str(text)))
+
+def translate_user_text_to_english(text: str) -> str:
+    text = str(text).strip()
+    if not text:
+        return text
+    if len(text) > 200:
+        text = text[:200]
+    if has_arabic(text):
+        return translate_text_cached(text, "en")
+    return text
+
+def translate_for_ui(text: str) -> str:
+    if get_lang() == "ar":
+        return translate_text_cached(text, "ar")
+    return text
+
 def find_existing_file(candidates: List[str]) -> Optional[str]:
     for name in candidates:
         path = os.path.join(BASE, name)
         if os.path.exists(path):
             return path
     return None
-
 
 def clean_text_for_match(text: str) -> str:
     text = str(text).lower().strip()
@@ -230,9 +437,8 @@ def clean_text_for_match(text: str) -> str:
     text = re.sub(r"\bwon['’]?t\b", "wont", text)
     text = re.sub(r"\bdoesn['’]?t\b", "doesnt", text)
     text = re.sub(r"\bdon['’]?t\b", "dont", text)
-    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    text = re.sub(r"[^a-z0-9\u0600-\u06FF\s]", " ", text)
     return re.sub(r"\s+", " ", text).strip()
-
 
 def normalize_disease_key(disease_name: str) -> str:
     return (
@@ -243,46 +449,40 @@ def normalize_disease_key(disease_name: str) -> str:
         .replace("_", "")
     )
 
-
 def confidence_message(top_conf: float, second_conf: float, matched_count: int) -> Tuple[str, str]:
     gap = top_conf - second_conf
-
     if matched_count < 2:
-        return "low", "Too few symptoms detected. Add 1–2 more relevant symptoms for a better result."
+        return "low", tr("few_symptoms_conf")
     if top_conf >= 0.60:
-        return "good", "Strong confidence prediction."
+        return "good", tr("confidence_strong")
     if top_conf >= 0.40 and gap >= 0.10:
-        return "good", "Reasonable confidence prediction."
+        return "good", tr("confidence_reasonable")
     if top_conf >= 0.22:
-        return "medium", "Moderate confidence. Symptoms may overlap, so adding more details may improve the result."
-    return "low", "Low confidence. Symptoms may be too general or overlapping."
-
+        return "medium", tr("confidence_moderate")
+    return "low", tr("confidence_low")
 
 def render_prediction_summary(top_disease: str) -> None:
     st.markdown(
         f"""
         <div class="summary-box">
-            <b>Most likely condition:</b> {escape(top_disease)}<br>
-            Based on the provided symptoms, this is the highest probability prediction from the model.
+            <b>{escape(tr("most_likely_condition"))}:</b> {escape(get_disease_display_label(top_disease))}<br>
+            {escape(tr("most_likely_text"))}
         </div>
         """,
         unsafe_allow_html=True
     )
 
-
 def render_symptom_pills(symptoms: List[str], prefix_check: bool = False) -> str:
     pills = []
     for sym in symptoms:
-        label = escape(str(sym).replace("_", " ").title())
+        label = escape(get_symptom_display_label(sym))
         if prefix_check:
             label = f"✓ {label}"
         pills.append(f'<span class="symptom-pill">{label}</span>')
     return "".join(pills)
 
-
 def tokenize_text(text: str) -> List[str]:
     return [tok for tok in clean_text_for_match(text).split() if tok]
-
 
 def build_ngrams(tokens: List[str], min_n: int = 1, max_n: int = 4) -> List[str]:
     phrases: List[str] = []
@@ -294,16 +494,31 @@ def build_ngrams(tokens: List[str], min_n: int = 1, max_n: int = 4) -> List[str]
             phrases.append(" ".join(tokens[i:i + n]))
     return phrases
 
-
 def render_pre_diagnosis_hint(symptoms: List[str]) -> None:
     if not symptoms:
         return
     if len(symptoms) == 1:
-        st.info("Add at least 2–3 symptoms for a more reliable prediction.")
+        st.info(tr("too_few_hint"))
     elif len(symptoms) > 8:
-        st.warning("Too many symptoms may reduce accuracy if they belong to different illnesses.")
+        st.warning(tr("too_many_hint"))
 
+def get_symptom_arabic(symptom_name: str) -> str:
+    clean_name = clean_text_for_match(symptom_name)
+    if clean_name in SYMPTOM_ARABIC_MAP:
+        return SYMPTOM_ARABIC_MAP[clean_name]
+    translated = translate_text_cached(str(symptom_name).replace("_", " "), "ar")
+    return translated if translated else str(symptom_name).replace("_", " ").title()
 
+def get_symptom_display_label(symptom_name: str) -> str:
+    if get_lang() == "ar":
+        return get_symptom_arabic(symptom_name)
+    return str(symptom_name).replace("_", " ").title()
+
+def get_disease_display_label(disease_name: str) -> str:
+    if get_lang() == "ar":
+        normalized = clean_text_for_match(disease_name)
+        return DISEASE_ARABIC_MAP.get(normalized, translate_text_cached(disease_name, "ar"))
+    return disease_name
 # ==============================
 # 4) FILE DISCOVERY
 # ==============================
@@ -316,7 +531,7 @@ required_files = [model_file, label_encoder_file, feature_columns_file]
 missing_files = [os.path.basename(f) for f in required_files if not os.path.exists(f)]
 
 if missing_files:
-    st.error("Missing required files:")
+    st.error(tr("missing_required_files"))
     for f in missing_files:
         st.write(f"- {f}")
     st.stop()
@@ -416,10 +631,22 @@ feature_index = {model: i for i, model in enumerate(model_features)}
 canonical_display_keys = list(display_to_model.keys())
 canonical_display_key_set = set(canonical_display_keys)
 
+display_to_ui_en: Dict[str, str] = {}
+display_to_ui_ar: Dict[str, str] = {}
+ui_en_to_display: Dict[str, str] = {}
+ui_ar_to_display: Dict[str, str] = {}
+
+for disp in display_features:
+    en_label = str(disp).replace("_", " ").title()
+    ar_label = get_symptom_arabic(disp)
+    display_to_ui_en[disp] = en_label
+    display_to_ui_ar[disp] = ar_label
+    ui_en_to_display[clean_text_for_match(en_label)] = disp
+    ui_ar_to_display[clean_text_for_match(ar_label)] = disp
+
 disease_index_by_key: Dict[str, int] = {}
 for idx, class_name in enumerate(le.classes_):
     disease_index_by_key[normalize_disease_key(class_name)] = idx
-
 # ==============================
 # 8) ALIASES / NORMALIZATION RULES
 # ==============================
@@ -657,6 +884,59 @@ ALIASES_TO_REAL_FEATURES: Dict[str, str] = {
     "family history": "family history",
     "depression": "depression",
     "anxious": "anxiety",
+
+    "صداع": "headache",
+    "صداع شديد": "headache",
+    "زغللة": "blurred and distorted vision",
+    "تشوش الرؤية": "blurred and distorted vision",
+    "ضيق تنفس": "breathlessness",
+    "ضيق في التنفس": "breathlessness",
+    "ألم صدر": "chest pain",
+    "ألم في الصدر": "chest pain",
+    "عطس": "continuous sneezing",
+    "عطس مستمر": "continuous sneezing",
+    "دموع في العين": "watering from eyes",
+    "دموع من العين": "watering from eyes",
+    "إسهال": "diarrhoea",
+    "اسهال": "diarrhoea",
+    "قيء": "vomiting",
+    "ترجيع": "vomiting",
+    "غثيان": "nausea",
+    "جفاف": "dehydration",
+    "ألم البطن": "indigestion",
+    "وجع بطن": "indigestion",
+    "مغص": "indigestion",
+    "كثرة التبول": "continuous feel of urine",
+    "حرقان بول": "burning micturition",
+    "حرقان أثناء التبول": "burning micturition",
+    "ألم المثانة": "bladder discomfort",
+    "رائحة بول كريهة": "foul smell of urine",
+    "حبوب": "pus filled pimples",
+    "حب شباب": "pus filled pimples",
+    "رؤوس سوداء": "blackheads",
+    "طفح جلدي": "skin rash",
+    "حكة": "itching",
+    "بقع جلدية": "dischromic patches",
+    "ندبات": "scurring",
+    "قشعريرة": "chills",
+    "ارتعاش": "shivering",
+    "إرهاق": "fatigue",
+    "تعب": "fatigue",
+    "دوخة": "dizziness",
+    "عدم تركيز": "lack of concentration",
+    "قلة تركيز": "lack of concentration",
+    "قلق": "anxiety",
+    "عصبية": "irritability",
+    "تعرق": "sweating",
+    "خفقان": "palpitations",
+    "سعال": "cough",
+    "بلغم": "mucoid sputum",
+    "تيبس الرقبة": "stiff neck",
+    "فقدان التوازن": "loss of balance",
+    "عيون غائرة": "sunken eyes",
+    "جفاف الشفاه": "drying and tingling lips",
+    "تلعثم": "slurred speech",
+    "اكتئاب": "depression",
 }
 
 alias_to_display: Dict[str, str] = {}
@@ -678,7 +958,8 @@ PROTECTED_TOKENS = {
     "headache", "sneezing", "breathing", "chest", "pain", "rash", "eyes",
     "eye", "frequent", "fever", "sweating", "dizzy", "dizziness",
     "stool", "loose", "hungry", "hunger", "pressure", "wheezing",
-    "coughing", "watery", "itching", "tingling", "phlegm"
+    "coughing", "watery", "itching", "tingling", "phlegm",
+    "صداع", "غثيان", "قيء", "إسهال", "اسهال", "دوخة", "تعب", "حكة", "سعال"
 }
 
 # ==============================
@@ -1119,10 +1400,22 @@ def get_original_display_from_clean(clean_name: str) -> Optional[str]:
     return cleaned_to_original_display.get(clean_name)
 
 
+def get_ui_label_for_display(display_value: str) -> str:
+    if get_lang() == "ar":
+        return display_to_ui_ar.get(display_value, get_symptom_arabic(display_value))
+    return display_to_ui_en.get(display_value, str(display_value).replace("_", " ").title())
+
+
+def resolve_ui_selection_to_display(selected_value: str) -> str:
+    selected_clean = clean_text_for_match(selected_value)
+    return ui_ar_to_display.get(selected_clean) or ui_en_to_display.get(selected_clean) or selected_value
+
+
 def convert_display_selection_to_model(selected_display_values: List[str]) -> List[str]:
     selected_model: List[str] = []
     for s in selected_display_values:
-        display_key = clean_text_for_match(s)
+        original_display = resolve_ui_selection_to_display(s)
+        display_key = clean_text_for_match(original_display)
         if display_key in display_to_model:
             selected_model.append(display_to_model[display_key])
     return list(dict.fromkeys(selected_model))
@@ -1139,13 +1432,14 @@ def queue_suggestion_addition(suggestion_clean: str) -> None:
     if not display_value:
         return
 
+    ui_value = get_ui_label_for_display(display_value)
     pending = st.session_state.get("pending_selected_display_additions", [])
 
-    if display_value not in pending:
-        pending.append(display_value)
+    if ui_value not in pending:
+        pending.append(ui_value)
 
     st.session_state["pending_selected_display_additions"] = pending
-    st.session_state["last_added_symptom"] = display_value
+    st.session_state["last_added_symptom"] = ui_value
     st.session_state["show_added_message"] = True
 
 
@@ -1155,14 +1449,14 @@ def apply_pending_selected_display_additions() -> None:
     if not pending:
         return
 
-    current = st.session_state.get("selected_display", [])
+    current = st.session_state.get("selected_display_ui", [])
     updated = list(current)
 
     for item in pending:
         if item not in updated:
             updated.append(item)
 
-    st.session_state["selected_display"] = updated
+    st.session_state["selected_display_ui"] = updated
     st.session_state["pending_selected_display_additions"] = []
 
 
@@ -1171,9 +1465,9 @@ def render_clickable_suggestions(suggestions: List[str], button_prefix: str = "s
         return
 
     st.markdown(
-        """
-        <div class="input-label" style="margin-top:1rem;">Suggested Symptoms</div>
-        <div class="small-note">Clicking a suggestion will add it to the selected symptoms list above.</div>
+        f"""
+        <div class="input-label" style="margin-top:1rem;">{escape(tr("suggested_symptoms"))}</div>
+        <div class="small-note">{escape(tr("suggested_symptoms_note"))}</div>
         """,
         unsafe_allow_html=True
     )
@@ -1181,7 +1475,8 @@ def render_clickable_suggestions(suggestions: List[str], button_prefix: str = "s
     cols = st.columns(min(3, max(1, len(suggestions))))
 
     for i, suggestion_clean in enumerate(suggestions):
-        pretty = suggestion_clean.replace("_", " ").title()
+        display_value = get_original_display_from_clean(suggestion_clean)
+        pretty = get_ui_label_for_display(display_value) if display_value else suggestion_clean.replace("_", " ").title()
 
         with cols[i % len(cols)]:
             if st.button(f"+ {pretty}", key=f"{button_prefix}_{suggestion_clean}_{i}"):
@@ -1195,10 +1490,7 @@ def build_top3_reasoning(results: List[Tuple[str, float]], combined_symptoms: Li
     if not results:
         return reasoning_cards
 
-    symptoms_text = ", ".join(
-        s.replace("_", " ").title() for s in combined_symptoms[:6]
-    ) if combined_symptoms else "the recognized symptoms"
-
+    symptoms_text = ", ".join(get_symptom_display_label(s) for s in combined_symptoms[:6]) if combined_symptoms else tr("recognized_for_diagnosis")
     top_conf = results[0][1]
 
     for i, (disease, conf) in enumerate(results[:3]):
@@ -1207,23 +1499,26 @@ def build_top3_reasoning(results: List[Tuple[str, float]], combined_symptoms: Li
 
         if rank == 1:
             reason = (
-                f"This is the top candidate because it received the highest combined score "
-                f"from the recognized symptom set: {symptoms_text}."
+                f"This is the top candidate because it received the highest combined score from the recognized symptom set: {symptoms_text}."
+            ) if get_lang() == "en" else (
+                f"هذه هي النتيجة الأولى لأنها حصلت على أعلى درجة مجمعة من الأعراض المعترف بها: {symptoms_text}."
             )
         elif gap_from_top < 0.05:
             reason = (
-                f"This remains a close alternative because its score is near the top prediction, "
-                f"which suggests overlapping symptom patterns in the current input."
+                "This remains a close alternative because its score is near the top prediction, which suggests overlapping symptom patterns in the current input."
+            ) if get_lang() == "en" else (
+                "هذه النتيجة ما زالت قريبة من النتيجة الأولى، مما يشير إلى وجود تداخل بين أنماط الأعراض في الإدخال الحالي."
             )
         else:
             reason = (
-                f"This is still plausible, but it scored clearly below the top candidate. "
-                f"That usually means only part of the recognized symptom set matches this disease pattern."
+                "This is still plausible, but it scored clearly below the top candidate. That usually means only part of the recognized symptom set matches this disease pattern."
+            ) if get_lang() == "en" else (
+                "هذه النتيجة ما زالت ممكنة، لكنها حصلت على درجة أقل بوضوح من النتيجة الأولى، وهذا يعني غالبًا أن جزءًا فقط من الأعراض يتوافق مع هذا المرض."
             )
 
         reasoning_cards.append({
             "rank": f"#{rank}",
-            "disease": disease,
+            "disease": get_disease_display_label(disease),
             "confidence": f"{conf * 100:.1f}%",
             "reason": reason
         })
@@ -1234,12 +1529,16 @@ def build_top3_reasoning(results: List[Tuple[str, float]], combined_symptoms: Li
 # ==============================
 # 15) SESSION STATE
 # ==============================
-if "selected_display" not in st.session_state:
-    st.session_state["selected_display"] = []
+if "ui_lang" not in st.session_state:
+    st.session_state["ui_lang"] = "en"
+if "selected_display_ui" not in st.session_state:
+    st.session_state["selected_display_ui"] = []
 if "pending_selected_display_additions" not in st.session_state:
     st.session_state["pending_selected_display_additions"] = []
 if "free_text" not in st.session_state:
     st.session_state["free_text"] = ""
+if "translated_input" not in st.session_state:
+    st.session_state["translated_input"] = ""
 if "results" not in st.session_state:
     st.session_state["results"] = None
 if "used_symptoms" not in st.session_state:
@@ -1269,10 +1568,61 @@ if "show_added_message" not in st.session_state:
 # ==============================
 # 16) UI HEADER
 # ==============================
-st.markdown("""
+def convert_selected_display_values_between_languages(values: List[str], target_lang: str) -> List[str]:
+    converted: List[str] = []
+
+    for value in values:
+        display_value = resolve_ui_selection_to_display(value)
+        if display_value in display_to_ui_en and display_value in display_to_ui_ar:
+            if target_lang == "ar":
+                converted.append(display_to_ui_ar[display_value])
+            else:
+                converted.append(display_to_ui_en[display_value])
+        else:
+            converted.append(value)
+
+    return list(dict.fromkeys(converted))
+
+
+lang_col1, lang_col2 = st.columns([5, 1])
+
+with lang_col2:
+    current_lang = st.session_state.get("ui_lang", "en")
+
+    lang_choice = st.selectbox(
+        tr("language"),
+        ["English", "العربية"],
+        index=0 if current_lang == "en" else 1,
+        key="language_switcher"
+    )
+
+    new_lang = "ar" if lang_choice == "العربية" else "en"
+
+    if current_lang != new_lang:
+        if "selected_display_ui" in st.session_state and st.session_state["selected_display_ui"]:
+            st.session_state["selected_display_ui"] = convert_selected_display_values_between_languages(
+                st.session_state["selected_display_ui"],
+                new_lang
+            )
+
+        if "pending_selected_display_additions" in st.session_state and st.session_state["pending_selected_display_additions"]:
+            st.session_state["pending_selected_display_additions"] = convert_selected_display_values_between_languages(
+                st.session_state["pending_selected_display_additions"],
+                new_lang
+            )
+
+        last_added = st.session_state.get("last_added_symptom")
+        if last_added:
+            converted_last = convert_selected_display_values_between_languages([last_added], new_lang)
+            st.session_state["last_added_symptom"] = converted_last[0] if converted_last else last_added
+
+        st.session_state["ui_lang"] = new_lang
+        st.rerun()
+
+st.markdown(f"""
 <div class="hero">
-    <h1>🩺 MediGuide AI</h1>
-    <p>AI-powered disease prediction using structured symptoms</p>
+    <h1>{escape(tr("app_title"))}</h1>
+    <p>{escape(tr("app_subtitle"))}</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1282,114 +1632,122 @@ st.markdown("""
 # ==============================
 apply_pending_selected_display_additions()
 
+current_options = [display_to_ui_ar[d] if get_lang() == "ar" else display_to_ui_en[d] for d in display_features]
+
 col1, col2 = st.columns([1, 1])
 
 with col1:
-    st.markdown('<div class="input-label">Select or Describe Your Symptoms</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="input-label">{escape(tr("symptom_input_title"))}</div>', unsafe_allow_html=True)
 
-    st.markdown("""
-    <div class="warn-box">
-        ⚠️ You can use the dropdown, type symptoms naturally, or use both.<br>
-        Try to enter symptoms from the same illness for better results.
-    </div>
-    """, unsafe_allow_html=True)
-
-    if st.session_state.get("show_added_message") and st.session_state.get("last_added_symptom"):
-        added_label = st.session_state["last_added_symptom"].replace("_", " ").title()
-        st.success(f"{added_label} added to selected symptoms")
-        st.session_state["show_added_message"] = False
-
-    selected_display = st.multiselect(
-        "Symptoms",
-        display_features,
-        placeholder="Choose symptoms from the list...",
-        help="Start typing to search and select symptoms from the list",
-        max_selections=10,
-        label_visibility="collapsed",
-        key="selected_display"
+    st.markdown(
+        f"""
+        <div class="warn-box">
+            {tr("warn_box")}
+        </div>
+        """,
+        unsafe_allow_html=True
     )
 
+    if st.session_state.get("show_added_message") and st.session_state.get("last_added_symptom"):
+        added_label = st.session_state["last_added_symptom"]
+        st.success(tr("added_success", symptom=added_label))
+        st.session_state["show_added_message"] = False
+
+    selected_ui = st.multiselect(
+        tr("symptoms_label"),
+        current_options,
+        placeholder=tr("symptoms_placeholder"),
+        help=tr("symptoms_help"),
+        max_selections=10,
+        label_visibility="collapsed",
+        key="selected_display_ui"
+    )
+
+    selected_display = [resolve_ui_selection_to_display(val) for val in selected_ui]
+
     free_text = st.text_area(
-        "Or type symptoms naturally",
-        placeholder="e.g. high fever, headache, blurred vision, frequent urination",
+        tr("free_text_label"),
+        placeholder=tr("free_text_placeholder"),
         height=110,
         key="free_text"
     )
 
-    detected_model, leftover_text, typo_corrections, corrected_text = extract_symptoms_from_text(free_text)
+    translated_free_text = translate_user_text_to_english(free_text)
+    st.session_state["translated_input"] = translated_free_text
+
+    detected_model, leftover_text, typo_corrections, corrected_text = extract_symptoms_from_text(translated_free_text)
     close_suggestions = closest_suggestions_for_unknown(leftover_text) if leftover_text else []
 
     selected_model_preview = convert_display_selection_to_model(selected_display)
     combined_preview_symptoms = merge_symptom_sources(selected_display, detected_model)
     st.session_state["preview_combined_symptoms"] = combined_preview_symptoms
 
-    if free_text.strip() and typo_corrections:
-        correction_text = ", ".join(
-            f"{escape(old)} → {escape(new)}" for old, new in typo_corrections[:8]
-        )
+    if translated_free_text.strip() and free_text.strip() and translated_free_text.strip() != free_text.strip():
         st.markdown(
-            f'<div class="typo-box">Auto-corrected: <b>{correction_text}</b></div>',
+            f'<div class="typo-box"><b>{escape(tr("translated_input"))}:</b> {escape(translated_free_text)}</div>',
+            unsafe_allow_html=True
+        )
+
+    if translated_free_text.strip() and typo_corrections:
+        correction_text = ", ".join(f"{escape(old)} → {escape(new)}" for old, new in typo_corrections[:8])
+        st.markdown(
+            f'<div class="typo-box">{escape(tr("auto_corrected"))}: <b>{correction_text}</b></div>',
             unsafe_allow_html=True
         )
 
     if combined_preview_symptoms:
         st.markdown(
-            f'''
-            <div style="margin-top:.65rem">
-                <div class="small-note">Recognized symptoms that will be used for diagnosis</div>
+            f"""
+            <div style=\"margin-top:.65rem\">
+                <div class=\"small-note\">{escape(tr("recognized_for_diagnosis"))}</div>
                 {render_symptom_pills(combined_preview_symptoms, prefix_check=True)}
             </div>
-            ''',
+            """,
             unsafe_allow_html=True
         )
 
         source_notes = []
         if selected_model_preview:
-            source_notes.append(f"{len(selected_model_preview)} from dropdown")
+            source_notes.append(tr("from_dropdown", count=len(selected_model_preview)))
         if detected_model:
-            source_notes.append(f"{len(detected_model)} from text")
+            source_notes.append(tr("from_text", count=len(detected_model)))
 
         if source_notes:
             st.markdown(
-                f'<div class="small-note" style="margin-top:.35rem">Source: {" + ".join(source_notes)}</div>',
+                f'<div class="small-note" style="margin-top:.35rem">{escape(tr("source_prefix"))}: {" + ".join(source_notes)}</div>',
                 unsafe_allow_html=True
             )
 
     render_pre_diagnosis_hint(combined_preview_symptoms)
 
-    if free_text.strip() and leftover_text:
+    if translated_free_text.strip() and leftover_text:
         extra = ""
         if close_suggestions:
-            pretty_suggestions = ", ".join(
-                escape(s.replace("_", " ").title()) for s in close_suggestions
-            )
-            extra = f"<br><span style='color:#cbd5e1'>Closest matches: {pretty_suggestions}</span>"
+            pretty_suggestions = ", ".join(escape(get_symptom_display_label(s)) for s in close_suggestions)
+            extra = f"<br><span style='color:#cbd5e1'>{escape(tr('closest_matches'))}: {pretty_suggestions}</span>"
 
         st.markdown(
-            f'<div class="unknown-box">Some text was not recognized: <b>{escape(leftover_text)}</b>{extra}</div>',
+            f'<div class="unknown-box">{escape(tr("unrecognized_text"))}: <b>{escape(leftover_text)}</b>{extra}</div>',
             unsafe_allow_html=True
         )
 
     if close_suggestions or typo_corrections:
-        combined_suggestions = list(dict.fromkeys(
-            close_suggestions + [
-                clean_text_for_match(new) for _, new in typo_corrections
-            ]
-        ))[:6]
+        combined_suggestions = list(dict.fromkeys(close_suggestions + [clean_text_for_match(new) for _, new in typo_corrections]))[:6]
         render_clickable_suggestions(combined_suggestions, button_prefix="left_suggest")
 
     b1, b2 = st.columns([3, 1])
     with b1:
-        diagnose_clicked = st.button("Diagnose", use_container_width=True)
+        diagnose_clicked = st.button(tr("diagnose"), use_container_width=True)
 
     with b2:
-        clear_clicked = st.button("Clear", use_container_width=True)
+        clear_clicked = st.button(tr("clear"), use_container_width=True)
 
 if clear_clicked:
     for key in [
-        "selected_display",
+        "selected_display_ui",
         "pending_selected_display_additions",
         "free_text",
+        "translated_input",
         "results",
         "used_symptoms",
         "decision_margin",
@@ -1417,14 +1775,14 @@ if diagnose_clicked:
     st.session_state["preview_combined_symptoms"] = combined_symptoms
 
     if not combined_symptoms:
-        st.warning("Please select symptoms or type symptoms that the system can recognize.")
+        st.warning(tr("select_warning"))
         st.session_state["results"] = None
         st.session_state["used_symptoms"] = []
         st.session_state["decision_margin"] = None
         st.session_state["decision_flags"] = {}
         st.session_state["top3_reasoning"] = []
     else:
-        with st.spinner("Analyzing symptoms..."):
+        with st.spinner(tr("analyzing")):
             prediction_output = predict_rf_core(tuple(combined_symptoms), k=5)
 
         if isinstance(prediction_output, dict) and "error" in prediction_output:
@@ -1449,10 +1807,7 @@ if diagnose_clicked:
                 st.session_state["used_symptoms"] = combined_symptoms
                 st.session_state["decision_margin"] = decision.get("margin")
                 st.session_state["decision_flags"] = decision.get("flags", {})
-                st.session_state["top3_reasoning"] = build_top3_reasoning(
-                    decision.get("results") or [],
-                    combined_symptoms
-                )
+                st.session_state["top3_reasoning"] = build_top3_reasoning(decision.get("results") or [], combined_symptoms)
 
 with col1:
     if st.session_state.get("results"):
@@ -1465,11 +1820,11 @@ with col1:
 
         st.markdown(f"""
         <div class="result-card top">
-            <div class="disease-name">{escape(top_disease)}</div>
+            <div class="disease-name">{escape(get_disease_display_label(top_disease))}</div>
             <div class="bar-bg">
                 <div class="bar" style="width:{top_conf * 100:.1f}%"></div>
             </div>
-            <p>{top_conf * 100:.1f}% confidence</p>
+            <p>{top_conf * 100:.1f}% {escape(tr("confidence_word"))}</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1483,64 +1838,67 @@ with col1:
             st.markdown(f'<div class="low-conf">{escape(msg)}</div>', unsafe_allow_html=True)
 
         if len(combined_symptoms) > 8:
-            st.warning("Too many mixed symptoms may reduce accuracy.")
+            st.warning(tr("too_many_mixed"))
 
         disease_key = normalize_disease_key(top_disease)
 
-        st.subheader("Recognized Symptoms Used")
+        st.subheader(tr("recognized_symptoms_used"))
         st.markdown(render_symptom_pills(combined_symptoms), unsafe_allow_html=True)
 
-        st.subheader("Description")
-        desc = desc_map.get(disease_key, "No description available.")
+        st.subheader(tr("description"))
+        desc = desc_map.get(disease_key, tr("no_description"))
+        desc = translate_for_ui(desc)
         st.markdown(f"**{escape(desc)}**")
 
-        st.subheader("Precautions")
+        st.subheader(tr("precautions"))
         precautions = prec_map.get(disease_key, [])
         if precautions:
             for precaution in precautions:
-                st.success(precaution)
+                st.success(translate_for_ui(precaution))
         else:
-            st.warning("No precautions available.")
+            st.warning(tr("no_precautions"))
 
 with col2:
-    st.markdown('<div class="input-label">How this works</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="input-label">{escape(tr("how_it_works"))}</div>', unsafe_allow_html=True)
 
-    st.markdown("""
-    <div class="warn-box">
-        Enter symptoms in simple natural language.<br>
-        The app uses typo correction, exact matching, dataset-aligned synonym matching, token-overlap matching, close-match recovery, and a disease-evidence layer before final ranking.
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(
+        f"""
+        <div class="warn-box">
+            {tr("how_it_works_text")}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-    if st.session_state.get("corrected_text") and st.session_state.get("free_text"):
-        if clean_text_for_match(st.session_state["corrected_text"]) != clean_text_for_match(st.session_state["free_text"]):
-            st.markdown('<div class="input-label" style="margin-top:1rem;">Corrected Input</div>', unsafe_allow_html=True)
-            st.markdown(
-                f'<div class="typo-box"><b>{escape(st.session_state["corrected_text"])}</b></div>',
-                unsafe_allow_html=True
-            )
+    if st.session_state.get("translated_input") and st.session_state.get("free_text"):
+        if st.session_state["translated_input"].strip() != st.session_state["free_text"].strip():
+            st.markdown(f'<div class="input-label" style="margin-top:1rem;">{escape(tr("translated_input"))}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="typo-box"><b>{escape(st.session_state["translated_input"])}</b></div>', unsafe_allow_html=True)
+
+    if st.session_state.get("corrected_text") and st.session_state.get("translated_input"):
+        if clean_text_for_match(st.session_state["corrected_text"]) != clean_text_for_match(st.session_state["translated_input"]):
+            st.markdown(f'<div class="input-label" style="margin-top:1rem;">{escape(tr("corrected_input"))}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="typo-box"><b>{escape(st.session_state["corrected_text"])}</b></div>', unsafe_allow_html=True)
 
     if st.session_state.get("leftover_text"):
-        st.markdown('<div class="input-label" style="margin-top:1rem;">Unmatched Text</div>', unsafe_allow_html=True)
-        st.markdown(
-            f'<div class="unknown-box"><b>{escape(st.session_state["leftover_text"])}</b></div>',
-            unsafe_allow_html=True
-        )
+        st.markdown(f'<div class="input-label" style="margin-top:1rem;">{escape(tr("unmatched_text"))}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="unknown-box"><b>{escape(st.session_state["leftover_text"])}</b></div>', unsafe_allow_html=True)
 
     if st.session_state.get("close_suggestions"):
-        pretty = [s.replace("_", " ").title() for s in st.session_state["close_suggestions"]]
-        st.markdown('<div class="input-label" style="margin-top:1rem;">Closest Symptom Matches</div>', unsafe_allow_html=True)
-        st.markdown(render_symptom_pills(pretty), unsafe_allow_html=True)
+        pretty = [get_symptom_display_label(s) for s in st.session_state["close_suggestions"]]
+        st.markdown(f'<div class="input-label" style="margin-top:1rem;">{escape(tr("closest_symptom_matches"))}</div>', unsafe_allow_html=True)
+        pill_html = "".join([f'<span class="symptom-pill">{escape(p)}</span>' for p in pretty])
+        st.markdown(pill_html, unsafe_allow_html=True)
 
     if st.session_state.get("top3_reasoning"):
-        st.markdown('<div class="input-label" style="margin-top:1rem;">Top-3 Reasoning</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="input-label" style="margin-top:1rem;">{escape(tr("top3_reasoning"))}</div>', unsafe_allow_html=True)
         for item in st.session_state["top3_reasoning"]:
             st.markdown(
                 f"""
                 <div class="reason-box">
                     <b>{escape(item["rank"])} — {escape(item["disease"])}</b><br>
-                    <span style="color:#7dd3fc">{escape(item["confidence"])} confidence</span><br><br>
-                    <span style="color:#cbd5e1">{escape(item["reason"])}</span>
+                    <span style="color:#7dd3fc">{escape(item["confidence"])} {escape(tr("confidence_word"))}</span><br><br>
+                    <span style="color:#cbd5e1">{escape(item["reason"])} </span>
                 </div>
                 """,
                 unsafe_allow_html=True
@@ -1550,6 +1908,6 @@ with col2:
 # 18) FOOTER
 # ==============================
 st.markdown(
-    '<div class="footer">Educational use only — not medical advice</div>',
+    f'<div class="footer">{escape(tr("footer"))}</div>',
     unsafe_allow_html=True
 )

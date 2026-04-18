@@ -3,3 +3,4 @@ pandas
 numpy
 scikit-learn
 joblib
+deep-translator==1.11.4
