@@ -249,11 +249,11 @@ def confidence_message(top_conf: float, second_conf: float, matched_count: int) 
 
     if matched_count < 2:
         return "low", "Too few symptoms detected. Add 1–2 more relevant symptoms for a better result."
-    if top_conf >= 0.50:
+    if top_conf >= 0.60:
         return "good", "Strong confidence prediction."
-    if top_conf >= 0.35 and gap >= 0.08:
+    if top_conf >= 0.40 and gap >= 0.10:
         return "good", "Reasonable confidence prediction."
-    if top_conf >= 0.20:
+    if top_conf >= 0.22:
         return "medium", "Moderate confidence. Symptoms may overlap, so adding more details may improve the result."
     return "low", "Low confidence. Symptoms may be too general or overlapping."
 
@@ -364,6 +364,7 @@ def load_models():
 
     return rf_model, label_encoder, model_feature_cols, raw_display_feature_cols
 
+
 # ==============================
 # 6) LOAD METADATA MAPS
 # ==============================
@@ -390,6 +391,7 @@ def load_maps():
 
     return desc_map, prec_map
 
+
 try:
     rf, le, model_features, display_features = load_models()
     desc_map, prec_map = load_maps()
@@ -412,216 +414,272 @@ for disp, model in zip(display_features, model_features):
 
 feature_index = {model: i for i, model in enumerate(model_features)}
 canonical_display_keys = list(display_to_model.keys())
+canonical_display_key_set = set(canonical_display_keys)
+
+disease_index_by_key: Dict[str, int] = {}
+for idx, class_name in enumerate(le.classes_):
+    disease_index_by_key[normalize_disease_key(class_name)] = idx
 
 # ==============================
 # 8) ALIASES / NORMALIZATION RULES
 # ==============================
-MANUAL_ALIASES = {
-    "fever": "high fever",
-    "high fever": "high fever",
-    "very high fever": "high fever",
-    "temperature": "high fever",
-    "high temperature": "high fever",
-    "raised temperature": "high fever",
-    "running a temperature": "high fever",
-    "feverish": "high fever",
-    "hot body": "high fever",
-    "body hot": "high fever",
-    "burning body": "high fever",
-    "mild fever": "mild fever",
-    "low fever": "mild fever",
-    "slight fever": "mild fever",
+def add_alias_mapping(alias_store: Dict[str, str], alias_phrase: str, target_feature: str) -> None:
+    alias_clean = clean_text_for_match(alias_phrase)
+    target_clean = clean_text_for_match(target_feature)
 
-    "chill": "chills",
-    "chills": "chills",
-    "shivering": "chills",
-    "shivers": "chills",
-    "rigors": "chills",
-    "night sweats": "sweating",
-    "sweat": "sweating",
-    "sweats": "sweating",
-    "heavy sweating": "sweating",
-    "excess sweating": "sweating",
-    "sweating heavily": "sweating",
+    if not alias_clean or not target_clean:
+        return
+    if target_clean not in canonical_display_key_set:
+        return
 
-    "head ache": "headache",
-    "head pain": "headache",
-    "pain in head": "headache",
-    "migraine": "headache",
+    alias_store[alias_clean] = target_clean
+    alias_store[alias_clean.replace(" ", "")] = target_clean
+    alias_store[alias_clean.replace(" ", "_")] = target_clean
+
+
+ALIASES_TO_REAL_FEATURES: Dict[str, str] = {
+    "headache": "headache",
     "severe headache": "headache",
     "bad headache": "headache",
-    "pain behind eyes": "headache",
-    "pain behind the eyes": "headache",
-    "eye pain": "headache",
-    "eye pressure": "headache",
+    "throbbing headache": "headache",
+    "one sided headache": "headache",
+    "migraine": "headache",
+    "head hurts": "headache",
+    "my head hurts": "headache",
+    "head hurts a lot": "headache",
+    "pain in my head": "headache",
+    "head is hurting": "headache",
 
-    "blurred vision": "blurred and distorted vision",
-    "blurry vision": "blurred and distorted vision",
-    "vision problems": "blurred and distorted vision",
-    "vision issue": "blurred and distorted vision",
-    "vision issues": "blurred and distorted vision",
-    "distorted vision": "blurred and distorted vision",
     "light sensitivity": "visual disturbances",
     "sensitivity to light": "visual disturbances",
     "sensitive to light": "visual disturbances",
-    "seeing flashing lights": "visual disturbances",
-    "seeing spots": "visual disturbances",
-
-    "tired": "fatigue",
-    "tiredness": "fatigue",
-    "weakness": "fatigue",
-    "feeling weak": "fatigue",
-    "very tired": "fatigue",
-    "extreme tiredness": "fatigue",
-    "exhausted": "fatigue",
-    "low energy": "fatigue",
-    "body weakness": "fatigue",
-    "general weakness": "fatigue",
-    "feeling tired": "fatigue",
-    "lack of energy": "fatigue",
+    "photophobia": "visual disturbances",
+    "vision changes": "visual disturbances",
+    "light hurts my eyes": "visual disturbances",
+    "light hurts eyes": "visual disturbances",
+    "bright light hurts my eyes": "visual disturbances",
+    "blurred vision": "blurred and distorted vision",
+    "blurry vision": "blurred and distorted vision",
+    "double vision": "blurred and distorted vision",
 
     "shortness of breath": "breathlessness",
-    "short breath": "breathlessness",
     "difficulty breathing": "breathlessness",
     "trouble breathing": "breathlessness",
-    "cant breathe": "breathlessness",
-    "can t breathe": "breathlessness",
-    "breathing problem": "breathlessness",
     "hard to breathe": "breathlessness",
     "breathless": "breathlessness",
+    "wheezing": "breathlessness",
+
+    "chest discomfort": "chest pain",
+    "chest pressure": "chest pain",
+    "pressure in chest": "chest pain",
+    "pressure in my chest": "chest pain",
+    "tight chest": "chest pain",
+    "chest tightness": "chest pain",
+
+    "continuous sneezing": "continuous sneezing",
+    "sneezing": "continuous sneezing",
+    "runny nose": "continuous sneezing",
+    "stuffy nose": "continuous sneezing",
+    "blocked nose": "continuous sneezing",
+    "nasal congestion": "continuous sneezing",
+
+    "watering eyes": "watering from eyes",
+    "watery eyes": "watering from eyes",
+    "teary eyes": "watering from eyes",
+    "eye watering": "watering from eyes",
+    "itchy watery eyes": "watering from eyes",
+    "eye irritation": "watering from eyes",
 
     "diarrhea": "diarrhoea",
     "diarrhoea": "diarrhoea",
     "loose motion": "diarrhoea",
-    "runny stool": "diarrhoea",
+    "loose motions": "diarrhoea",
+    "loose stool": "diarrhoea",
     "loose stools": "diarrhoea",
+    "lose stool": "diarrhoea",
+    "lose stools": "diarrhoea",
     "watery stool": "diarrhoea",
     "watery stools": "diarrhoea",
 
-    "vomit": "vomiting",
     "vomiting": "vomiting",
     "throwing up": "vomiting",
     "threw up": "vomiting",
-    "feel like vomiting": "nausea",
-    "feeling like vomiting": "nausea",
-    "want to vomit": "nausea",
+
+    "nausea": "nausea",
+    "feeling sick": "nausea",
     "queasy": "nausea",
-    "queasiness": "nausea",
-    "sick to my stomach": "nausea",
+    "feel nauseous": "nausea",
+    "feel like vomiting": "nausea",
+    "want to vomit": "nausea",
 
-    "stomach ache": "abdominal pain",
-    "stomach cramps": "abdominal pain",
-    "belly pain": "abdominal pain",
-    "belly ache": "abdominal pain",
-    "tummy pain": "abdominal pain",
-    "tummy ache": "abdominal pain",
-    "abdomen pain": "abdominal pain",
-    "pain in abdomen": "abdominal pain",
-    "pain in stomach": "stomach pain",
-    "stomach pain": "stomach pain",
+    "dehydrated": "dehydration",
+    "dehydration": "dehydration",
 
-    "loss of appetite": "loss of appetite",
-    "no appetite": "loss of appetite",
-    "not eating": "loss of appetite",
-    "reduced appetite": "loss of appetite",
-    "poor appetite": "loss of appetite",
+    "abdominal pain": "indigestion",
+    "stomach pain": "indigestion",
+    "stomach ache": "indigestion",
+    "stomach hurts": "indigestion",
+    "belly pain": "indigestion",
+    "belly ache": "indigestion",
+    "tummy pain": "indigestion",
+    "tummy ache": "indigestion",
+    "abdomen pain": "indigestion",
+    "pain in stomach": "indigestion",
+    "pain in abdomen": "indigestion",
+    "lower abdominal pain": "indigestion",
+    "cramps": "indigestion",
+    "stomach cramps": "indigestion",
 
-    "body pain": "muscle pain",
-    "body ache": "muscle pain",
-    "muscle ache": "muscle pain",
-    "whole body pain": "muscle pain",
-    "body soreness": "muscle pain",
-    "muscle soreness": "muscle pain",
-
-    "joint ache": "joint pain",
-    "bone pain": "joint pain",
-    "pain in joints": "joint pain",
-    "aching joints": "joint pain",
-    "severe joint pain": "joint pain",
-
-    "chest ache": "chest pain",
-    "pressure in chest": "chest pain",
-    "tight chest": "chest pain",
-    "chest discomfort": "chest pain",
-
-    "back ache": "back pain",
-    "lower back ache": "back pain",
-    "low back pain": "back pain",
-
-    "skin rash": "rash",
-    "red spots": "rash",
-    "red patch": "rash",
-    "red patches": "rash",
-    "itchy skin": "itching",
-    "skin itching": "itching",
-    "itching skin": "itching",
-
-    "fast heartbeat": "fast heart rate",
-    "heart racing": "fast heart rate",
-    "rapid heartbeat": "fast heart rate",
-    "heart beating fast": "fast heart rate",
-    "palpitations": "fast heart rate",
-
-    "dizzy": "dizziness",
-    "feeling dizzy": "dizziness",
-    "lightheaded": "dizziness",
-    "light headed": "dizziness",
-    "faint feeling": "dizziness",
-    "feel faint": "dizziness",
-
-    "frequent urination": "polyuria",
-    "urinating frequently": "polyuria",
-    "pee a lot": "polyuria",
-    "peeing a lot": "polyuria",
-    "excessive urination": "polyuria",
-    "frequent peeing": "polyuria",
+    "frequent urination": "continuous feel of urine",
+    "urinating frequently": "continuous feel of urine",
+    "urinating often": "continuous feel of urine",
+    "peeing often": "continuous feel of urine",
+    "pee a lot": "continuous feel of urine",
+    "frequent pee": "continuous feel of urine",
+    "peeing a lot": "continuous feel of urine",
+    "passing urine often": "continuous feel of urine",
+    "urge to pee": "continuous feel of urine",
+    "need to pee often": "continuous feel of urine",
 
     "burning urination": "burning micturition",
     "burning while urinating": "burning micturition",
     "painful urination": "burning micturition",
     "pain when urinating": "burning micturition",
+    "urine burns": "burning micturition",
+    "burning urine": "burning micturition",
+    "urine burning": "burning micturition",
+    "burning pee": "burning micturition",
+    "pee burns": "burning micturition",
+    "pain while peeing": "burning micturition",
 
-    "runny nose": "runny nose",
-    "blocked nose": "congestion",
-    "stuffy nose": "congestion",
-    "nasal congestion": "congestion",
-    "sore throat": "throat irritation",
-    "throat pain": "throat irritation",
-    "itchy throat": "throat irritation",
+    "bladder pain": "bladder discomfort",
+    "bladder discomfort": "bladder discomfort",
+    "pelvic pressure": "bladder discomfort",
+    "pressure in bladder": "bladder discomfort",
+
+    "smelly urine": "foul smell of urine",
+    "foul smelling urine": "foul smell of urine",
+    "bad smelling urine": "foul smell of urine",
+
+    "pimples": "pus filled pimples",
+    "pimple": "pus filled pimples",
+    "acne": "pus filled pimples",
+    "breakouts": "pus filled pimples",
+    "skin pimples": "pus filled pimples",
+    "pus filled pimples": "pus filled pimples",
+
+    "black heads": "blackheads",
+    "blackheads": "blackheads",
+    "oily skin": "blackheads",
+
+    "skin rash": "skin rash",
+    "rash": "skin rash",
+    "red rash": "skin rash",
+    "itchy rash": "skin rash",
+    "skin redness": "skin rash",
+    "redness": "skin rash",
+
+    "itching": "itching",
+    "itchy skin": "itching",
+
+    "patches": "dischromic patches",
+    "skin patches": "dischromic patches",
+    "discolored patches": "dischromic patches",
+    "dischromic patches": "dischromic patches",
+
+    "scarring": "scurring",
+    "scars": "scurring",
+    "skin scarring": "scurring",
+
+    "shivering": "shivering",
+    "shaking": "shivering",
+    "trembling": "shivering",
+    "tremor": "shivering",
+    "tremors": "shivering",
+    "chills": "chills",
+    "cold sweat": "sweating",
+    "cold sweats": "sweating",
+
+    "fatigue": "fatigue",
+    "tired": "fatigue",
+    "tiredness": "fatigue",
+    "weakness": "fatigue",
+    "feeling weak": "fatigue",
+    "low energy": "fatigue",
+    "exhausted": "fatigue",
+    "unusual fatigue": "fatigue",
+
+    "hunger": "excessive hunger",
+    "hungry": "excessive hunger",
+    "very hungry": "excessive hunger",
+    "extreme hunger": "excessive hunger",
+    "always hungry": "excessive hunger",
+
+    "dizziness": "dizziness",
+    "feeling dizzy": "dizziness",
+    "lightheaded": "dizziness",
+    "light headed": "dizziness",
+
+    "confusion": "lack of concentration",
+    "trouble concentrating": "lack of concentration",
+    "difficulty concentrating": "lack of concentration",
+    "lack of concentration": "lack of concentration",
+
+    "anxiety": "anxiety",
+    "irritable": "irritability",
+    "irritability": "irritability",
+
+    "sweating": "sweating",
+    "sweat": "sweating",
+    "heavy sweating": "sweating",
+    "excess sweating": "sweating",
+
+    "heart racing": "palpitations",
+    "palpitations": "palpitations",
+    "fast heartbeat": "palpitations",
+    "faster heart rate": "palpitations",
+
     "coughing": "cough",
-    "dry cough": "cough",
-    "wet cough": "cough",
+    "cough": "cough",
+    "persistent cough": "cough",
 
-    "yellow eyes": "yellowish skin",
-    "yellowing eyes": "yellowish skin",
-    "yellow skin": "yellowish skin",
-    "skin turning yellow": "yellowish skin",
+    "mucus cough": "mucoid sputum",
+    "phlegm": "mucoid sputum",
+    "sputum": "mucoid sputum",
+    "mucoid sputum": "mucoid sputum",
 
-    "high fever with chills": "chills",
-    "muscle and bone pain": "muscle pain",
-    "pain all over body": "muscle pain",
+    "stiff neck": "stiff neck",
+    "loss of balance": "loss of balance",
+    "sunken eyes": "sunken eyes",
+    "dry lips": "drying and tingling lips",
+    "tingling lips": "drying and tingling lips",
+    "slurred speech": "slurred speech",
+    "family history": "family history",
+    "depression": "depression",
+    "anxious": "anxiety",
 }
 
 alias_to_display: Dict[str, str] = {}
 
-for disp in display_features:
-    cleaned = clean_text_for_match(disp)
-    alias_to_display[cleaned] = cleaned
-    alias_to_display[cleaned.replace(" ", "")] = cleaned
-    alias_to_display[cleaned.replace(" ", "_")] = cleaned
+for display_feature in display_features:
+    clean_disp = clean_text_for_match(display_feature)
+    alias_to_display[clean_disp] = clean_disp
+    alias_to_display[clean_disp.replace(" ", "")] = clean_disp
+    alias_to_display[clean_disp.replace(" ", "_")] = clean_disp
 
-for alias, target in MANUAL_ALIASES.items():
-    alias_clean = clean_text_for_match(alias)
-    target_clean = clean_text_for_match(target)
-
-    if target_clean in display_to_model:
-        alias_to_display[alias_clean] = target_clean
-        alias_to_display[alias_clean.replace(" ", "")] = target_clean
-        alias_to_display[alias_clean.replace(" ", "_")] = target_clean
-    elif target_clean.replace(" ", "") in display_to_model:
-        alias_to_display[alias_clean] = target_clean.replace(" ", "")
+for alias_phrase, target_feature in ALIASES_TO_REAL_FEATURES.items():
+    add_alias_mapping(alias_to_display, alias_phrase, target_feature)
 
 sorted_aliases = sorted(alias_to_display.keys(), key=len, reverse=True)
+
+PROTECTED_TOKENS = {
+    "light", "watery", "stomach", "belly", "tummy", "pimples", "pimple",
+    "urinating", "urination", "peeing", "burning", "vomiting", "nausea",
+    "headache", "sneezing", "breathing", "chest", "pain", "rash", "eyes",
+    "eye", "frequent", "fever", "sweating", "dizzy", "dizziness",
+    "stool", "loose", "hungry", "hunger", "pressure", "wheezing",
+    "coughing", "watery", "itching", "tingling", "phlegm"
+}
 
 # ==============================
 # 9) TEXT MATCHING
@@ -635,8 +693,16 @@ def build_typo_token_pool() -> List[str]:
                 token_pool.add(token)
     return sorted(token_pool)
 
-
 TYPO_TOKEN_POOL = build_typo_token_pool()
+
+NON_SYMPTOM_LEFTOVER_WORDS = {
+    "i", "im", "my", "me", "a", "an", "the", "and", "or", "but",
+    "with", "without", "of", "in", "on", "at", "to", "for",
+    "feel", "feels", "feeling", "like", "have", "has", "had",
+    "is", "are", "was", "were", "be", "been", "being",
+    "very", "really", "so", "too", "lot", "lower", "upper",
+    "center", "left", "side", "body", "usual", "activities"
+}
 
 
 def auto_correct_text_input(raw_text: str) -> Tuple[str, List[Tuple[str, str]]]:
@@ -650,10 +716,19 @@ def auto_correct_text_input(raw_text: str) -> Tuple[str, List[Tuple[str, str]]]:
 
     for token in tokens:
         corrected = token
-        if len(token) >= 4 and token not in TYPO_TOKEN_POOL:
-            close = get_close_matches(token, TYPO_TOKEN_POOL, n=1, cutoff=0.78)
+
+        should_try = (
+            len(token) >= 4
+            and token not in TYPO_TOKEN_POOL
+            and token not in PROTECTED_TOKENS
+        )
+
+        if should_try:
+            close = get_close_matches(token, TYPO_TOKEN_POOL, n=1, cutoff=0.88)
             if close:
-                corrected = close[0]
+                candidate = close[0]
+                if candidate and candidate[0] == token[0] and abs(len(candidate) - len(token)) <= 1:
+                    corrected = candidate
 
         corrected_tokens.append(corrected)
         if corrected != token:
@@ -697,7 +772,7 @@ def fuzzy_phrase_match_candidates(cleaned_text: str, detected_model: List[str]) 
     ngrams = build_ngrams(tokens, 1, 4)
 
     for phrase in ngrams:
-        close = get_close_matches(phrase, candidate_pool, n=1, cutoff=0.90)
+        close = get_close_matches(phrase, candidate_pool, n=1, cutoff=0.92)
         if not close:
             continue
 
@@ -711,19 +786,27 @@ def fuzzy_phrase_match_candidates(cleaned_text: str, detected_model: List[str]) 
             add_detected_symptom(model_symptom, detected_model)
 
 
+def clean_leftover_text(leftover_text: str) -> str:
+    tokens = tokenize_text(leftover_text)
+    filtered = [tok for tok in tokens if tok not in NON_SYMPTOM_LEFTOVER_WORDS]
+    return " ".join(filtered).strip()
+
+
 def closest_suggestions_for_unknown(leftover_text: str, max_suggestions: int = 6) -> List[str]:
     tokens = tokenize_text(leftover_text)
     if not tokens:
         return []
 
+    suggestion_keys = list(alias_to_display.keys())
     ngrams = build_ngrams(tokens, 1, 4)
     suggestions: List[str] = []
 
     for phrase in ngrams:
-        close = get_close_matches(phrase, canonical_display_keys, n=3, cutoff=0.78)
+        close = get_close_matches(phrase, suggestion_keys, n=3, cutoff=0.80)
         for item in close:
-            if item not in suggestions:
-                suggestions.append(item)
+            resolved_display = alias_to_display.get(item, item)
+            if resolved_display in canonical_display_keys and resolved_display not in suggestions:
+                suggestions.append(resolved_display)
             if len(suggestions) >= max_suggestions:
                 return suggestions
 
@@ -740,8 +823,8 @@ def extract_symptoms_from_text(text: str) -> Tuple[List[str], str, List[Tuple[st
     remaining = cleaned
 
     for alias in sorted_aliases:
-        display_key = alias_to_display[alias]
-        if display_key not in display_to_model:
+        display_key = alias_to_display.get(alias)
+        if not display_key or display_key not in display_to_model:
             continue
 
         model_symptom = display_to_model[display_key]
@@ -749,13 +832,22 @@ def extract_symptoms_from_text(text: str) -> Tuple[List[str], str, List[Tuple[st
 
         if re.search(pattern, remaining):
             add_detected_symptom(model_symptom, detected_model)
-            remaining = re.sub(pattern, " ", remaining, count=1)
+            remaining = re.sub(pattern, " ", remaining)
 
     partial_token_match_candidates(cleaned, detected_model)
     fuzzy_phrase_match_candidates(cleaned, detected_model)
 
+    for model_symptom in detected_model:
+        disp_key = model_to_display.get(model_symptom, "")
+        if disp_key:
+            pattern = r"\b" + re.escape(disp_key) + r"\b"
+            remaining = re.sub(pattern, " ", remaining)
+
+    remaining = clean_leftover_text(remaining)
     remaining = re.sub(r"\s+", " ", remaining).strip()
+
     return detected_model, remaining, corrections, corrected_text
+
 
 # ==============================
 # 10) VECTOR BUILDING
@@ -769,8 +861,160 @@ def build_input_vector(selected_model_symptoms: List[str]) -> np.ndarray:
 
     return input_vector
 
+
 # ==============================
-# 11) MODEL PREDICTION
+# 11) DISEASE EVIDENCE TUNING
+# ==============================
+DISEASE_SIGNATURES: Dict[str, Dict[str, Union[List[str], float]]] = {
+    "migraine": {
+        "core": ["headache"],
+        "support": ["nausea", "visual disturbances", "blurred and distorted vision", "dizziness", "fatigue", "irritability", "stiff neck"],
+        "bonus": 0.12,
+        "pair_bonus": 0.10,
+        "triple_bonus": 0.12,
+    },
+    "hypertension": {
+        "core": ["headache", "dizziness"],
+        "support": ["chest pain", "palpitations", "blurred and distorted vision", "fatigue", "anxiety"],
+        "bonus": 0.08,
+        "pair_bonus": 0.08,
+        "triple_bonus": 0.07,
+    },
+    "gastroenteritis": {
+        "core": ["diarrhoea", "vomiting"],
+        "support": ["dehydration", "nausea", "indigestion", "chills", "fatigue", "sunken eyes"],
+        "bonus": 0.14,
+        "pair_bonus": 0.12,
+        "triple_bonus": 0.12,
+    },
+    "urinarytractinfection": {
+        "core": ["burning micturition", "continuous feel of urine"],
+        "support": ["bladder discomfort", "foul smell of urine", "fatigue", "nausea"],
+        "bonus": 0.16,
+        "pair_bonus": 0.13,
+        "triple_bonus": 0.10,
+    },
+    "acne": {
+        "core": ["pus filled pimples", "blackheads"],
+        "support": ["skin rash", "scurring", "nodal skin eruptions"],
+        "bonus": 0.16,
+        "pair_bonus": 0.12,
+        "triple_bonus": 0.08,
+    },
+    "hypoglycemia": {
+        "core": ["excessive hunger", "sweating"],
+        "support": ["dizziness", "fatigue", "palpitations", "anxiety", "irritability", "lack of concentration", "shivering"],
+        "bonus": 0.12,
+        "pair_bonus": 0.12,
+        "triple_bonus": 0.10,
+    },
+    "heartattack": {
+        "core": ["chest pain", "breathlessness"],
+        "support": ["sweating", "nausea", "fatigue", "dizziness", "palpitations", "anxiety"],
+        "bonus": 0.14,
+        "pair_bonus": 0.12,
+        "triple_bonus": 0.12,
+    },
+    "bronchialasthma": {
+        "core": ["breathlessness", "cough"],
+        "support": ["chest pain", "fatigue", "mucoid sputum"],
+        "bonus": 0.12,
+        "pair_bonus": 0.10,
+        "triple_bonus": 0.10,
+    },
+    "allergy": {
+        "core": ["continuous sneezing", "watering from eyes"],
+        "support": ["itching", "skin rash", "cough", "fatigue", "drying and tingling lips"],
+        "bonus": 0.14,
+        "pair_bonus": 0.10,
+        "triple_bonus": 0.08,
+    },
+    "fungalinfection": {
+        "core": ["itching", "skin rash"],
+        "support": ["dischromic patches", "nodal skin eruptions", "scurring"],
+        "bonus": 0.14,
+        "pair_bonus": 0.10,
+        "triple_bonus": 0.08,
+    },
+}
+
+
+def apply_disease_evidence_boost(probabilities: np.ndarray, selected_model_symptoms: List[str]) -> np.ndarray:
+    adjusted = probabilities.astype(float).copy()
+    symptom_set = set(selected_model_symptoms)
+
+    if not symptom_set:
+        return adjusted
+
+    for disease_key, rules in DISEASE_SIGNATURES.items():
+        class_index = disease_index_by_key.get(disease_key)
+        if class_index is None:
+            continue
+
+        core = [s for s in rules["core"] if s in symptom_set]
+        support = [s for s in rules["support"] if s in symptom_set]
+
+        if not core and not support:
+            continue
+
+        boost = 0.0
+
+        if len(core) >= 1:
+            boost += float(rules["bonus"])
+        if len(core) >= 2:
+            boost += float(rules["pair_bonus"])
+        if len(core) >= 1 and len(support) >= 1:
+            boost += float(rules["pair_bonus"])
+        if len(core) >= 2 and len(support) >= 1:
+            boost += float(rules["triple_bonus"])
+        if len(core) >= 1 and len(support) >= 2:
+            boost += float(rules["triple_bonus"])
+
+        adjusted[class_index] += boost
+
+    migraine_idx = disease_index_by_key.get("migraine")
+    hypertension_idx = disease_index_by_key.get("hypertension")
+    heart_idx = disease_index_by_key.get("heartattack")
+    asthma_idx = disease_index_by_key.get("bronchialasthma")
+    hypo_idx = disease_index_by_key.get("hypoglycemia")
+
+    if migraine_idx is not None and hypertension_idx is not None:
+        if "headache" in symptom_set and (
+            "visual disturbances" in symptom_set or
+            "blurred and distorted vision" in symptom_set or
+            "nausea" in symptom_set
+        ):
+            adjusted[migraine_idx] += 0.10
+            adjusted[hypertension_idx] -= 0.03
+
+    if heart_idx is not None and hypertension_idx is not None:
+        if "chest pain" in symptom_set and "breathlessness" in symptom_set:
+            adjusted[heart_idx] += 0.08
+        if "sweating" in symptom_set and "chest pain" in symptom_set:
+            adjusted[heart_idx] += 0.05
+            adjusted[hypertension_idx] -= 0.02
+
+    if asthma_idx is not None and heart_idx is not None:
+        if "breathlessness" in symptom_set and "cough" in symptom_set:
+            adjusted[asthma_idx] += 0.08
+        if "mucoid sputum" in symptom_set:
+            adjusted[asthma_idx] += 0.06
+            adjusted[heart_idx] -= 0.02
+
+    if hypo_idx is not None and hypertension_idx is not None:
+        if "excessive hunger" in symptom_set and "sweating" in symptom_set:
+            adjusted[hypo_idx] += 0.08
+            adjusted[hypertension_idx] -= 0.02
+        if "lack of concentration" in symptom_set:
+            adjusted[hypo_idx] += 0.04
+
+    adjusted = np.clip(adjusted, 1e-9, None)
+    adjusted = adjusted / adjusted.sum()
+    return adjusted
+
+
+# ==============================
+# 12) MODEL PREDICTION
 # ==============================
 def predict_rf_core(selected_model_symptoms_tuple: Tuple[str, ...], k: int = 5) -> Union[Dict[str, str], List[Tuple[str, float]]]:
     selected_model_symptoms = list(selected_model_symptoms_tuple)
@@ -787,13 +1031,15 @@ def predict_rf_core(selected_model_symptoms_tuple: Tuple[str, ...], k: int = 5) 
     if probabilities is None or len(probabilities) == 0:
         return {"error": "Prediction failed. Empty probability output."}
 
-    k = min(k, len(probabilities))
-    top_indices = np.argsort(probabilities)[::-1][:k]
+    tuned_probabilities = apply_disease_evidence_boost(probabilities, selected_model_symptoms)
+
+    k = min(k, len(tuned_probabilities))
+    top_indices = np.argsort(tuned_probabilities)[::-1][:k]
 
     results: List[Tuple[str, float]] = []
     for idx in top_indices:
         disease_name = le.inverse_transform([idx])[0]
-        confidence = float(probabilities[idx])
+        confidence = float(tuned_probabilities[idx])
         results.append((disease_name, confidence))
 
     if not results:
@@ -801,8 +1047,9 @@ def predict_rf_core(selected_model_symptoms_tuple: Tuple[str, ...], k: int = 5) 
 
     return results
 
+
 # ==============================
-# 12) DECISION LAYER
+# 13) DECISION LAYER
 # ==============================
 def evaluate_prediction(results: List[Tuple[str, float]], matched_count: int):
     if not results:
@@ -826,8 +1073,9 @@ def evaluate_prediction(results: List[Tuple[str, float]], matched_count: int):
         "reliable": not any(flags.values())
     }
 
+
 # ==============================
-# 13) TOP-3 REASONING + SUGGESTIONS UI HELPERS
+# 14) TOP-3 REASONING + SUGGESTIONS UI HELPERS
 # ==============================
 def get_original_display_from_clean(clean_name: str) -> Optional[str]:
     return cleaned_to_original_display.get(clean_name)
@@ -921,7 +1169,7 @@ def build_top3_reasoning(results: List[Tuple[str, float]], combined_symptoms: Li
 
         if rank == 1:
             reason = (
-                f"This is the top candidate because it received the highest model probability "
+                f"This is the top candidate because it received the highest combined score "
                 f"from the recognized symptom set: {symptoms_text}."
             )
         elif gap_from_top < 0.05:
@@ -944,8 +1192,9 @@ def build_top3_reasoning(results: List[Tuple[str, float]], combined_symptoms: Li
 
     return reasoning_cards
 
+
 # ==============================
-# 14) SESSION STATE
+# 15) SESSION STATE
 # ==============================
 if "selected_display" not in st.session_state:
     st.session_state["selected_display"] = []
@@ -978,8 +1227,9 @@ if "last_added_symptom" not in st.session_state:
 if "show_added_message" not in st.session_state:
     st.session_state["show_added_message"] = False
 
+
 # ==============================
-# 15) UI HEADER
+# 16) UI HEADER
 # ==============================
 st.markdown("""
 <div class="hero">
@@ -988,8 +1238,9 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+
 # ==============================
-# 16) MAIN UI
+# 17) MAIN UI
 # ==============================
 apply_pending_selected_display_additions()
 
@@ -1219,7 +1470,7 @@ with col2:
     st.markdown("""
     <div class="warn-box">
         Enter symptoms in simple natural language.<br>
-        The app tries auto typo correction, exact matching, synonym matching, token-overlap matching, and close-match recovery before prediction.
+        The app uses typo correction, exact matching, dataset-aligned synonym matching, token-overlap matching, close-match recovery, and a disease-evidence layer before final ranking.
     </div>
     """, unsafe_allow_html=True)
 
@@ -1256,8 +1507,9 @@ with col2:
                 """,
                 unsafe_allow_html=True
             )
+
 # ==============================
-# 17) FOOTER
+# 18) FOOTER
 # ==============================
 st.markdown(
     '<div class="footer">Educational use only — not medical advice</div>',
