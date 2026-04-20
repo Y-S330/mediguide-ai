@@ -264,25 +264,10 @@ UI_TEXT = {
         "few_symptoms_conf": "Too few symptoms detected. Add 1–2 more relevant symptoms for a better result.",
         "missing_required_files": "Missing required files:",
         "confidence_word": "confidence",
-        "category": "Category",
-        "disease_category": "Disease category",
-        "filter_by_category": "Filter symptoms by category",
-        "all_categories": "All categories",
-        "quick_search_label": "Quick symptom search",
-        "quick_search_placeholder": "Type to get Google-like symptom suggestions...",
-        "quick_search_note": "Start typing a symptom phrase and click a suggestion to add it instantly.",
-        "no_quick_matches": "No close symptom matches yet.",
-        "grouped_preview": "Smart grouped symptom preview",
-        "sentence_groups": "Sentence groups detected from your text",
-        "conflict_explanation": "Why there may be confusion",
-        "conflict_hint": "These diseases are close because some recognized symptoms overlap.",
-        "autocomplete_matches": "Top autocomplete matches",
-        "live_suggestions_label": "Suggestions while you type",
-        "live_suggestions_note": "Helpful matches appear automatically from the free-text box — no separate search needed.",
         "recommended_department": "Suggested medical department",
-        "primary_department": "Main department",
-        "secondary_department": "Related department",
-        "department_note": "This is only a guidance suggestion based on the current prediction, not a final medical referral.",
+        "primary_department": "Primary department",
+        "secondary_department": "Also relevant",
+        "department_note": "This is only a guidance suggestion, not a confirmed referral or diagnosis.",
     },
     "ar": {
         "language": "اللغة",
@@ -334,25 +319,10 @@ UI_TEXT = {
         "few_symptoms_conf": "تم التعرف على أعراض قليلة جدًا. أضف 1–2 أعراض أخرى مناسبة للحصول على نتيجة أفضل.",
         "missing_required_files": "الملفات المطلوبة غير موجودة:",
         "confidence_word": "ثقة",
-        "category": "الفئة",
-        "disease_category": "تصنيف المرض",
-        "filter_by_category": "تصفية الأعراض حسب الفئة",
-        "all_categories": "كل الفئات",
-        "quick_search_label": "بحث سريع عن الأعراض",
-        "quick_search_placeholder": "اكتب عرضًا لتحصل على اقتراحات فورية شبيهة بجوجل...",
-        "quick_search_note": "ابدأ بكتابة عرض أو وصف قصير ثم اضغط على الاقتراح لإضافته فورًا.",
-        "no_quick_matches": "لا توجد اقتراحات قريبة حتى الآن.",
-        "grouped_preview": "معاينة ذكية مجمعة للأعراض",
-        "sentence_groups": "المجموعات المكتشفة من الجمل",
-        "conflict_explanation": "سبب احتمال وجود التباس",
-        "conflict_hint": "هذه الأمراض متقاربة لأن بعض الأعراض المعترف بها متداخلة.",
-        "autocomplete_matches": "أفضل اقتراحات الإكمال",
-        "live_suggestions_label": "اقتراحات أثناء الكتابة",
-        "live_suggestions_note": "تظهر الاقتراحات المفيدة تلقائيًا من مربع الكتابة الحرة بدون حاجة لبحث منفصل.",
         "recommended_department": "القسم الطبي المقترح",
-        "primary_department": "القسم الرئيسي",
-        "secondary_department": "قسم ذو صلة",
-        "department_note": "هذا اقتراح إرشادي فقط بناءً على التوقع الحالي وليس تحويلًا طبيًا نهائيًا.",
+        "primary_department": "القسم الأساسي",
+        "secondary_department": "قسم آخر مرتبط",
+        "department_note": "هذه مجرد إشارة إرشادية وليست إحالة طبية مؤكدة أو تشخيصًا نهائيًا.",
     }
 }
 
@@ -415,94 +385,47 @@ DISEASE_ARABIC_MAP = {
 }
 
 
-# Only the 10 supported diseases are categorized here.
-DISEASE_CATEGORY_MAP_EN = {
-    "acne": "Skin",
-    "allergy": "Immune / Respiratory",
-    "bronchialasthma": "Chest / Respiratory",
-    "fungalinfection": "Skin",
-    "gastroenteritis": "Digestive / Abdomen",
-    "heartattack": "Cardiovascular",
-    "hypertension": "Cardiovascular",
-    "hypoglycemia": "Metabolic / Endocrine",
-    "migraine": "Head / Neurological",
-    "urinarytractinfection": "Urinary",
-}
-
-DISEASE_CATEGORY_MAP_AR = {
-    "acne": "الجلد",
-    "allergy": "المناعة / التنفس",
-    "bronchialasthma": "الصدر / التنفس",
-    "fungalinfection": "الجلد",
-    "gastroenteritis": "الجهاز الهضمي / البطن",
-    "heartattack": "القلب والأوعية",
-    "hypertension": "القلب والأوعية",
-    "hypoglycemia": "التمثيل الغذائي / الغدد",
-    "migraine": "الرأس / الأعصاب",
-    "urinarytractinfection": "الجهاز البولي",
-}
-
-SYMPTOM_CATEGORY_MAP_EN = {
-    "headache": "Head / Neurological",
-    "visual disturbances": "Head / Neurological",
-    "blurred and distorted vision": "Head / Neurological",
-    "stiff neck": "Head / Neurological",
-    "loss of balance": "Head / Neurological",
-    "slurred speech": "Head / Neurological",
-
-    "breathlessness": "Chest / Respiratory",
-    "chest pain": "Chest / Respiratory",
-    "cough": "Chest / Respiratory",
-    "mucoid sputum": "Chest / Respiratory",
-    "palpitations": "Chest / Respiratory",
-
-    "continuous sneezing": "Allergy / ENT",
-    "watering from eyes": "Allergy / ENT",
-    "drying and tingling lips": "Allergy / ENT",
-
-    "diarrhoea": "Digestive / Abdomen",
-    "vomiting": "Digestive / Abdomen",
-    "nausea": "Digestive / Abdomen",
-    "dehydration": "Digestive / Abdomen",
-    "indigestion": "Digestive / Abdomen",
-    "sunken eyes": "Digestive / Abdomen",
-    "acidity": "Digestive / Abdomen",
-
-    "continuous feel of urine": "Urinary",
-    "burning micturition": "Urinary",
-    "bladder discomfort": "Urinary",
-    "foul smell of urine": "Urinary",
-
-    "pus filled pimples": "Skin",
-    "blackheads": "Skin",
-    "skin rash": "Skin",
-    "itching": "Skin",
-    "dischromic patches": "Skin",
-    "scurring": "Skin",
-    "nodal skin eruptions": "Skin",
-
-    "fatigue": "General / Metabolic",
-    "excessive hunger": "General / Metabolic",
-    "dizziness": "General / Metabolic",
-    "lack of concentration": "General / Metabolic",
-    "anxiety": "General / Metabolic",
-    "irritability": "General / Metabolic",
-    "sweating": "General / Metabolic",
-    "shivering": "General / Metabolic",
-    "chills": "General / Metabolic",
-    "high fever": "General / Metabolic",
-    "family history": "General / Metabolic",
-    "depression": "General / Metabolic",
-}
-
-CATEGORY_TRANSLATIONS = {
-    "Head / Neurological": "الرأس / الأعصاب",
-    "Chest / Respiratory": "الصدر / التنفس",
-    "Allergy / ENT": "الحساسية / الأنف والعين",
-    "Digestive / Abdomen": "الجهاز الهضمي / البطن",
-    "Urinary": "الجهاز البولي",
-    "Skin": "الجلد",
-    "General / Metabolic": "عام / أيضي",
+DEPARTMENT_RECOMMENDATIONS = {
+    "migraine": {
+        "en": {"primary": "Neurology", "secondary": "Internal Medicine / Family Medicine"},
+        "ar": {"primary": "المخ والأعصاب", "secondary": "الباطنة / طب الأسرة"},
+    },
+    "hypertension": {
+        "en": {"primary": "Cardiology", "secondary": "Internal Medicine / Family Medicine"},
+        "ar": {"primary": "القلب والأوعية الدموية", "secondary": "الباطنة / طب الأسرة"},
+    },
+    "heart attack": {
+        "en": {"primary": "Emergency / Cardiology", "secondary": "Critical Care"},
+        "ar": {"primary": "الطوارئ / القلب", "secondary": "العناية المركزة"},
+    },
+    "bronchial asthma": {
+        "en": {"primary": "Chest / Pulmonology", "secondary": "Internal Medicine / Allergy"},
+        "ar": {"primary": "الصدر / أمراض الرئة", "secondary": "الباطنة / الحساسية"},
+    },
+    "allergy": {
+        "en": {"primary": "Allergy / Immunology", "secondary": "ENT or Chest"},
+        "ar": {"primary": "الحساسية والمناعة", "secondary": "الأنف والأذن أو الصدر"},
+    },
+    "gastroenteritis": {
+        "en": {"primary": "Gastroenterology", "secondary": "Internal Medicine / Family Medicine"},
+        "ar": {"primary": "الجهاز الهضمي", "secondary": "الباطنة / طب الأسرة"},
+    },
+    "urinary tract infection": {
+        "en": {"primary": "Urology", "secondary": "Internal Medicine / Family Medicine"},
+        "ar": {"primary": "المسالك البولية", "secondary": "الباطنة / طب الأسرة"},
+    },
+    "hypoglycemia": {
+        "en": {"primary": "Endocrinology", "secondary": "Internal Medicine / Family Medicine"},
+        "ar": {"primary": "الغدد الصماء", "secondary": "الباطنة / طب الأسرة"},
+    },
+    "fungal infection": {
+        "en": {"primary": "Dermatology", "secondary": "Internal Medicine / Family Medicine"},
+        "ar": {"primary": "الجلدية", "secondary": "الباطنة / طب الأسرة"},
+    },
+    "acne": {
+        "en": {"primary": "Dermatology", "secondary": "Internal Medicine / Family Medicine"},
+        "ar": {"primary": "الجلدية", "secondary": "الباطنة / طب الأسرة"},
+    },
 }
 
 if "ui_lang" not in st.session_state:
@@ -650,148 +573,13 @@ def get_disease_display_label(disease_name: str) -> str:
     return disease_name
 
 
-def get_disease_category_label(disease_name: str) -> str:
-    disease_key = normalize_disease_key(disease_name)
-    if get_lang() == "ar":
-        return DISEASE_CATEGORY_MAP_AR.get(disease_key, "")
-    return DISEASE_CATEGORY_MAP_EN.get(disease_key, "")
-
-def get_symptom_category_label(symptom_name: str) -> str:
-    clean_name = clean_text_for_match(symptom_name)
-    english_label = SYMPTOM_CATEGORY_MAP_EN.get(clean_name, "General / Metabolic")
-    if get_lang() == "ar":
-        return CATEGORY_TRANSLATIONS.get(english_label, english_label)
-    return english_label
-
-def get_category_filter_options() -> List[str]:
-    english_categories = list(dict.fromkeys(SYMPTOM_CATEGORY_MAP_EN.values()))
-    if get_lang() == "ar":
-        return [tr("all_categories")] + [CATEGORY_TRANSLATIONS.get(cat, cat) for cat in english_categories]
-    return [tr("all_categories")] + english_categories
-
-def filter_display_features_by_category(selected_category_label: str) -> List[str]:
-    if not selected_category_label or selected_category_label == tr("all_categories"):
-        return list(display_features)
-    english_category = selected_category_label
-    if get_lang() == "ar":
-        reverse_map = {v: k for k, v in CATEGORY_TRANSLATIONS.items()}
-        english_category = reverse_map.get(selected_category_label, selected_category_label)
-
-    filtered = []
-    for disp in display_features:
-        clean_name = clean_text_for_match(disp)
-        if SYMPTOM_CATEGORY_MAP_EN.get(clean_name, "General / Metabolic") == english_category:
-            filtered.append(disp)
-    return filtered
-
-def get_live_symptom_fragment(raw_text: str, translated_text: str = "") -> str:
-    source = translated_text if translated_text.strip() else raw_text
-    if not str(source).strip():
-        return ""
-    segments = re.split(r"[\n\r\.,;:،!؟]+", str(source))
-    last_segment = ""
-    for segment in reversed(segments):
-        if segment and segment.strip():
-            last_segment = segment.strip()
-            break
-    if not last_segment:
-        return ""
-    tokens = tokenize_text(last_segment)
-    if not tokens:
-        return ""
-    return " ".join(tokens[-4:])
-
-
-def get_quick_symptom_matches(query: str, max_items: int = 8) -> List[str]:
-    query_clean = clean_text_for_match(query)
-    if not query_clean:
-        return []
-
-    ranked: List[Tuple[int, str]] = []
-    candidate_pairs: List[Tuple[str, str]] = []
-
-    if "alias_to_display" in globals():
-        for alias_phrase, display_key in alias_to_display.items():
-            original_display = get_original_display_from_clean(display_key) or cleaned_to_original_display.get(display_key)
-            if original_display:
-                candidate_pairs.append((alias_phrase, original_display))
-
-    for disp in display_features:
-        candidate_pairs.append((clean_text_for_match(disp), disp))
-        candidate_pairs.append((clean_text_for_match(get_ui_label_for_display(disp)), disp))
-
-    seen_pairs = set()
-    for candidate_phrase, disp in candidate_pairs:
-        pair_key = (candidate_phrase, disp)
-        if pair_key in seen_pairs:
-            continue
-        seen_pairs.add(pair_key)
-
-        score = 0
-        if query_clean == candidate_phrase:
-            score = 100
-        elif candidate_phrase.startswith(query_clean):
-            score = 85
-        elif query_clean in candidate_phrase:
-            score = 65
-        else:
-            close = get_close_matches(query_clean, [candidate_phrase], n=1, cutoff=0.74)
-            if close:
-                score = 40
-
-        if score:
-            ranked.append((score, disp))
-
-    ranked.sort(key=lambda x: (-x[0], get_ui_label_for_display(x[1])))
-    deduped: List[str] = []
-    for _, disp in ranked:
-        if disp not in deduped:
-            deduped.append(disp)
-        if len(deduped) >= max_items:
-            break
-    return deduped
-
-def group_symptoms_by_category(symptoms: List[str]) -> Dict[str, List[str]]:
-    grouped: Dict[str, List[str]] = {}
-    for sym in symptoms:
-        cat = get_symptom_category_label(sym)
-        grouped.setdefault(cat, []).append(sym)
-    return grouped
-
-def split_user_text_into_segments(text: str) -> List[str]:
-    raw_segments = re.split(r"[\n\r\.,;:،!؟]+", str(text))
-    cleaned = [seg.strip() for seg in raw_segments if seg and seg.strip()]
-    return cleaned[:6]
-
-def build_sentence_symptom_groups(user_text: str) -> List[Tuple[str, List[str]]]:
-    groups: List[Tuple[str, List[str]]] = []
-    for segment in split_user_text_into_segments(user_text):
-        detected_model, _, _, _ = extract_symptoms_from_text(segment)
-        if detected_model:
-            groups.append((segment, detected_model))
-    return groups
-
-def build_conflict_explanations(results: List[Tuple[str, float]], combined_symptoms: List[str]) -> List[str]:
-    explanations: List[str] = []
-    symptom_set = set(combined_symptoms)
-    if len(results) < 2:
-        return explanations
-
-    for alt_disease, _ in results[1:3]:
-        alt_key = normalize_disease_key(alt_disease)
-        rules = DISEASE_SIGNATURES.get(alt_key)
-        if not rules:
-            continue
-
-        overlap = [s for s in (rules["core"] + rules["support"]) if s in symptom_set]
-        if overlap:
-            overlap_text = ", ".join(get_symptom_display_label(s) for s in overlap[:4])
-            disease_label = get_disease_display_label(alt_disease)
-            if get_lang() == "ar":
-                explanations.append(f"{disease_label}: اقترب من النتيجة الأولى بسبب تطابق أعراض مثل {overlap_text}.")
-            else:
-                explanations.append(f"{disease_label}: stayed close because it also matches symptoms like {overlap_text}.")
-    return explanations
+def get_department_recommendation(disease_name: str) -> Dict[str, str]:
+    normalized = clean_text_for_match(disease_name)
+    dept = DEPARTMENT_RECOMMENDATIONS.get(normalized, {})
+    if not dept:
+        return {}
+    lang = "ar" if get_lang() == "ar" else "en"
+    return dept.get(lang, dept.get("en", {}))
 # ==============================
 # 4) FILE DISCOVERY
 # ==============================
@@ -1212,179 +1000,6 @@ ALIASES_TO_REAL_FEATURES: Dict[str, str] = {
     "اكتئاب": "depression",
 }
 
-
-EXTRA_ALIASES_TO_REAL_FEATURES: Dict[str, str] = {
-    "acid reflux": "acidity",
-    "heartburn": "acidity",
-    "sour stomach": "acidity",
-    "burning chest": "acidity",
-    "vision blur": "blurred and distorted vision",
-    "fuzzy vision": "blurred and distorted vision",
-    "seeing flashes": "visual disturbances",
-    "seeing spots": "visual disturbances",
-    "seeing stars": "visual disturbances",
-    "out of breath": "breathlessness",
-    "cant breathe": "breathlessness",
-    "can't breathe": "breathlessness",
-    "gasping for air": "breathlessness",
-    "pressure on chest": "chest pain",
-    "heavy chest": "chest pain",
-    "heart pain": "chest pain",
-    "hay fever": "continuous sneezing",
-    "sniffles": "continuous sneezing",
-    "snotty nose": "continuous sneezing",
-    "tearing eyes": "watering from eyes",
-    "eye tears": "watering from eyes",
-    "the runs": "diarrhoea",
-    "runny stool": "diarrhoea",
-    "puking": "vomiting",
-    "barfing": "vomiting",
-    "retching": "vomiting",
-    "sick to my stomach": "nausea",
-    "upset stomach": "indigestion",
-    "stomach upset": "indigestion",
-    "acid stomach": "indigestion",
-    "bloated": "indigestion",
-    "bloating": "indigestion",
-    "thirsty": "dehydration",
-    "dry mouth": "dehydration",
-    "parched": "dehydration",
-    "always need to pee": "continuous feel of urine",
-    "urge to urinate": "continuous feel of urine",
-    "burns when i pee": "burning micturition",
-    "pee hurts": "burning micturition",
-    "pain when i pee": "burning micturition",
-    "pelvic ache": "bladder discomfort",
-    "lower belly pressure": "bladder discomfort",
-    "stinky urine": "foul smell of urine",
-    "urine smells bad": "foul smell of urine",
-    "zits": "pus filled pimples",
-    "pustules": "pus filled pimples",
-    "whiteheads": "pus filled pimples",
-    "clogged pores": "blackheads",
-    "skin breakout": "skin rash",
-    "hives": "skin rash",
-    "itchy": "itching",
-    "itchiness": "itching",
-    "skin discoloration": "dischromic patches",
-    "dark patches": "dischromic patches",
-    "white patches": "dischromic patches",
-    "scar marks": "scurring",
-    "old scars": "scurring",
-    "cold chills": "chills",
-    "shivers": "shivering",
-    "shakes": "shivering",
-    "drained": "fatigue",
-    "worn out": "fatigue",
-    "very tired": "fatigue",
-    "constant hunger": "excessive hunger",
-    "starving": "excessive hunger",
-    "woozy": "dizziness",
-    "faint": "dizziness",
-    "brain fog": "lack of concentration",
-    "cant focus": "lack of concentration",
-    "can't focus": "lack of concentration",
-    "restless": "anxiety",
-    "nervous": "anxiety",
-    "moody": "irritability",
-    "easily annoyed": "irritability",
-    "clammy": "sweating",
-    "sweaty": "sweating",
-    "heart fluttering": "palpitations",
-    "heart flutter": "palpitations",
-    "racing heart": "palpitations",
-    "fast pulse": "palpitations",
-    "dry cough": "cough",
-    "wet cough": "cough",
-    "chesty cough": "cough",
-    "phlegmy cough": "mucoid sputum",
-    "mucus": "mucoid sputum",
-    "neck stiffness": "stiff neck",
-    "tight neck": "stiff neck",
-    "unsteady": "loss of balance",
-    "losing balance": "loss of balance",
-    "sunken looking eyes": "sunken eyes",
-    "chapped lips": "drying and tingling lips",
-    "numb lips": "drying and tingling lips",
-    "garbled speech": "slurred speech",
-    "family illness": "family history",
-    "runs in the family": "family history",
-    "feeling down": "depression",
-    "low mood": "depression",
-    "sad": "depression",
-    "fever": "high fever",
-    "running a temperature": "high fever",
-    "temperature": "high fever",
-    "hot body": "high fever",
-
-    "وجع رأس": "headache",
-    "راسي بيوجعني": "headache",
-    "ألم رأس": "headache",
-    "زغللة قوية": "blurred and distorted vision",
-    "تشويش في الرؤية": "blurred and distorted vision",
-    "أشوف مشوش": "blurred and distorted vision",
-    "مش قادر أتنفس": "breathlessness",
-    "ما أقدر أتنفس": "breathlessness",
-    "صعوبة تنفس": "breathlessness",
-    "نهجان": "breathlessness",
-    "وجع صدر": "chest pain",
-    "ضغط في الصدر": "chest pain",
-    "كتمة صدر": "chest pain",
-    "رشح": "continuous sneezing",
-    "سيلان الأنف": "continuous sneezing",
-    "دموع بالعين": "watering from eyes",
-    "عيوني تدمع": "watering from eyes",
-    "ترجيع شديد": "vomiting",
-    "استفراغ": "vomiting",
-    "لعيان": "nausea",
-    "معدة مقلوبة": "nausea",
-    "عطشان جدًا": "dehydration",
-    "جفاف في الجسم": "dehydration",
-    "بطني بتوجعني": "indigestion",
-    "بطني تعبانة": "indigestion",
-    "اضطراب معدة": "indigestion",
-    "تبول كثير": "continuous feel of urine",
-    "أحتاج أتبول كثير": "continuous feel of urine",
-    "بولي يحرق": "burning micturition",
-    "حرقان لما أبول": "burning micturition",
-    "وجع مثانة": "bladder discomfort",
-    "ريحة البول وحشة": "foul smell of urine",
-    "حبوب صديد": "pus filled pimples",
-    "زيوان": "blackheads",
-    "طفح": "skin rash",
-    "هرش": "itching",
-    "جلدي بيحكني": "itching",
-    "بقع غامقة": "dischromic patches",
-    "بقع فاتحة": "dischromic patches",
-    "آثار": "scurring",
-    "رعشة": "shivering",
-    "رجفة": "shivering",
-    "برد في جسمي": "chills",
-    "مجهد": "fatigue",
-    "تعبان جدًا": "fatigue",
-    "جعان جدًا": "excessive hunger",
-    "دوار": "dizziness",
-    "مش مركز": "lack of concentration",
-    "توتر": "anxiety",
-    "معصب": "irritability",
-    "عرقان": "sweating",
-    "قلبي بيدق بسرعة": "palpitations",
-    "خفقان قلب": "palpitations",
-    "كحة": "cough",
-    "كحة ناشفة": "cough",
-    "بلغم كثير": "mucoid sputum",
-    "رقبتي متيبسة": "stiff neck",
-    "عدم اتزان": "loss of balance",
-    "عيوني غائرة": "sunken eyes",
-    "شفايفي ناشفة": "drying and tingling lips",
-    "كلامي متلخبط": "slurred speech",
-    "مرض وراثي بالعائلة": "family history",
-    "اكتئاب شديد": "depression",
-    "حرارتي عالية": "high fever",
-    "جسمي حار": "high fever",
-}
-ALIASES_TO_REAL_FEATURES.update(EXTRA_ALIASES_TO_REAL_FEATURES)
-
 alias_to_display: Dict[str, str] = {}
 
 for display_feature in display_features:
@@ -1405,8 +1020,7 @@ PROTECTED_TOKENS = {
     "eye", "frequent", "fever", "sweating", "dizzy", "dizziness",
     "stool", "loose", "hungry", "hunger", "pressure", "wheezing",
     "coughing", "watery", "itching", "tingling", "phlegm",
-    "heart", "fluttering", "vision", "breath", "temperature", "stomach", "focus",
-    "صداع", "غثيان", "قيء", "إسهال", "اسهال", "دوخة", "تعب", "حكة", "سعال", "راسي", "بطني", "تنفس", "حرارة"
+    "صداع", "غثيان", "قيء", "إسهال", "اسهال", "دوخة", "تعب", "حكة", "سعال"
 }
 
 # ==============================
@@ -1943,8 +1557,6 @@ def build_top3_reasoning(results: List[Tuple[str, float]], combined_symptoms: Li
     for i, (disease, conf) in enumerate(results[:3]):
         rank = i + 1
         gap_from_top = top_conf - conf
-        disease_label = get_disease_display_label(disease)
-        category_label = get_disease_category_label(disease)
 
         if rank == 1:
             reason = (
@@ -1965,10 +1577,9 @@ def build_top3_reasoning(results: List[Tuple[str, float]], combined_symptoms: Li
                 "هذه النتيجة ما زالت ممكنة، لكنها حصلت على درجة أقل بوضوح من النتيجة الأولى، وهذا يعني غالبًا أن جزءًا فقط من الأعراض يتوافق مع هذا المرض."
             )
 
-        display_name = f"{disease_label} — {category_label}" if category_label else disease_label
         reasoning_cards.append({
             "rank": f"#{rank}",
-            "disease": display_name,
+            "disease": get_disease_display_label(disease),
             "confidence": f"{conf * 100:.1f}%",
             "reason": reason
         })
@@ -2013,10 +1624,6 @@ if "last_added_symptom" not in st.session_state:
     st.session_state["last_added_symptom"] = None
 if "show_added_message" not in st.session_state:
     st.session_state["show_added_message"] = False
-if "selected_symptom_category" not in st.session_state:
-    st.session_state["selected_symptom_category"] = tr("all_categories")
-if "conflict_explanations" not in st.session_state:
-    st.session_state["conflict_explanations"] = []
 
 
 # ==============================
@@ -2073,27 +1680,6 @@ with lang_col2:
         st.session_state["ui_lang"] = new_lang
         st.rerun()
 
-if get_lang() == "ar":
-    st.markdown("""
-    <style>
-    .stApp, [data-testid="block-container"] {direction: rtl;}
-    .stTextArea textarea, .stTextInput input {
-        direction: rtl !important;
-        text-align: right !important;
-    }
-    .stMultiSelect [data-baseweb="select"],
-    .stSelectbox [data-baseweb="select"] {
-        direction: rtl !important;
-        text-align: right !important;
-    }
-    .warn-box, .unknown-box, .typo-box, .reason-box, .summary-box,
-    .good-conf, .med-conf, .low-conf, .small-note, .footer {
-        direction: rtl;
-        text-align: right;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
 st.markdown(f"""
 <div class="hero">
     <h1>{escape(tr("app_title"))}</h1>
@@ -2107,12 +1693,7 @@ st.markdown(f"""
 # ==============================
 apply_pending_selected_display_additions()
 
-category_filter_options = get_category_filter_options()
-selected_category_label = st.session_state.get("selected_symptom_category", tr("all_categories"))
-if selected_category_label not in category_filter_options:
-    selected_category_label = tr("all_categories")
-filtered_display_features = filter_display_features_by_category(selected_category_label)
-current_options = [display_to_ui_ar[d] if get_lang() == "ar" else display_to_ui_en[d] for d in filtered_display_features]
+current_options = [display_to_ui_ar[d] if get_lang() == "ar" else display_to_ui_en[d] for d in display_features]
 
 col1, col2 = st.columns([1, 1])
 
@@ -2132,14 +1713,6 @@ with col1:
         added_label = st.session_state["last_added_symptom"]
         st.success(tr("added_success", symptom=added_label))
         st.session_state["show_added_message"] = False
-
-    category_index = category_filter_options.index(selected_category_label) if selected_category_label in category_filter_options else 0
-    selected_category_label = st.selectbox(
-        tr("filter_by_category"),
-        category_filter_options,
-        index=category_index,
-        key="selected_symptom_category"
-    )
 
     selected_ui = st.multiselect(
         tr("symptoms_label"),
@@ -2163,20 +1736,12 @@ with col1:
     translated_free_text = translate_user_text_to_english(free_text)
     st.session_state["translated_input"] = translated_free_text
 
-    live_query = get_live_symptom_fragment(free_text, translated_free_text)
-    live_matches = get_quick_symptom_matches(live_query) if live_query else []
-
     detected_model, leftover_text, typo_corrections, corrected_text = extract_symptoms_from_text(translated_free_text)
     close_suggestions = closest_suggestions_for_unknown(leftover_text) if leftover_text else []
 
     selected_model_preview = convert_display_selection_to_model(selected_display)
     combined_preview_symptoms = merge_symptom_sources(selected_display, detected_model)
     st.session_state["preview_combined_symptoms"] = combined_preview_symptoms
-
-    if live_matches:
-        st.markdown(f'<div class="small-note" style="margin-top:.45rem">{escape(tr("live_suggestions_label"))}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="small-note">{escape(tr("live_suggestions_note"))}</div>', unsafe_allow_html=True)
-        render_clickable_suggestions(live_matches, button_prefix="live_match")
 
     if translated_free_text.strip() and free_text.strip() and translated_free_text.strip() != free_text.strip():
         st.markdown(
@@ -2213,26 +1778,6 @@ with col1:
                 f'<div class="small-note" style="margin-top:.35rem">{escape(tr("source_prefix"))}: {" + ".join(source_notes)}</div>',
                 unsafe_allow_html=True
             )
-
-        grouped_preview = group_symptoms_by_category(combined_preview_symptoms)
-        if grouped_preview:
-            st.markdown(f'<div class="small-note" style="margin-top:.45rem">{escape(tr("grouped_preview"))}</div>', unsafe_allow_html=True)
-            for category_name, symptom_values in grouped_preview.items():
-                category_pills = render_symptom_pills(symptom_values)
-                st.markdown(
-                    f'<div class="small-note" style="margin-top:.25rem"><b>{escape(category_name)}</b></div>{category_pills}',
-                    unsafe_allow_html=True
-                )
-
-        sentence_groups = build_sentence_symptom_groups(translated_free_text) if translated_free_text.strip() else []
-        if sentence_groups:
-            st.markdown(f'<div class="small-note" style="margin-top:.55rem">{escape(tr("sentence_groups"))}</div>', unsafe_allow_html=True)
-            for raw_segment, segment_symptoms in sentence_groups:
-                segment_label = raw_segment[:90]
-                st.markdown(
-                    f'<div class="reason-box"><b>{escape(segment_label)}</b><br>{render_symptom_pills(segment_symptoms)}</div>',
-                    unsafe_allow_html=True
-                )
 
     render_pre_diagnosis_hint(combined_preview_symptoms)
 
@@ -2275,8 +1820,7 @@ if clear_clicked:
         "top3_reasoning",
         "preview_combined_symptoms",
         "last_added_symptom",
-        "show_added_message",
-        "conflict_explanations"
+        "show_added_message"
     ]:
         if key in st.session_state:
             del st.session_state[key]
@@ -2325,7 +1869,6 @@ if diagnose_clicked:
                 st.session_state["decision_margin"] = decision.get("margin")
                 st.session_state["decision_flags"] = decision.get("flags", {})
                 st.session_state["top3_reasoning"] = build_top3_reasoning(decision.get("results") or [], combined_symptoms)
-                st.session_state["conflict_explanations"] = build_conflict_explanations(decision.get("results") or [], combined_symptoms)
 
 with col1:
     if st.session_state.get("results"):
@@ -2336,11 +1879,9 @@ with col1:
         second_conf = results[1][1] if len(results) > 1 else 0.0
         level, msg = confidence_message(top_conf, second_conf, len(combined_symptoms))
 
-        disease_category = get_disease_category_label(top_disease)
         st.markdown(f"""
         <div class="result-card top">
             <div class="disease-name">{escape(get_disease_display_label(top_disease))}</div>
-            {"<div class='small-note'><b>" + escape(tr("disease_category")) + ":</b> " + escape(disease_category) + "</div>" if disease_category else ""}
             <div class="bar-bg">
                 <div class="bar" style="width:{top_conf * 100:.1f}%"></div>
             </div>
@@ -2377,20 +1918,6 @@ with col1:
                 st.success(translate_for_ui(precaution))
         else:
             st.warning(tr("no_precautions"))
-
-        dept_info = get_department_recommendation(top_disease)
-        if dept_info:
-            st.subheader(tr("recommended_department"))
-            st.markdown(
-                f"""
-                <div class="reason-box">
-                    <b>{escape(tr("primary_department"))}:</b> {escape(dept_info.get("primary", ""))}<br>
-                    <b>{escape(tr("secondary_department"))}:</b> {escape(dept_info.get("secondary", ""))}<br><br>
-                    <span style="color:#cbd5e1">{escape(tr("department_note"))}</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
 
 with col2:
     st.markdown(f'<div class="input-label">{escape(tr("how_it_works"))}</div>', unsafe_allow_html=True)
@@ -2437,12 +1964,6 @@ with col2:
                 """,
                 unsafe_allow_html=True
             )
-
-    if st.session_state.get("conflict_explanations"):
-        st.markdown(f'<div class="input-label" style="margin-top:1rem;">{escape(tr("conflict_explanation"))}</div>', unsafe_allow_html=True)
-        st.markdown(f'<div class="small-note">{escape(tr("conflict_hint"))}</div>', unsafe_allow_html=True)
-        for line in st.session_state["conflict_explanations"]:
-            st.markdown(f'<div class="reason-box">{escape(line)}</div>', unsafe_allow_html=True)
 
 # ==============================
 # 18) FOOTER
